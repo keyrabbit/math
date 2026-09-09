@@ -13,4 +13,40 @@ Running log of milestones, learnings, bugs, and opportunities. Newest entries at
 - Created public repo github.com/keyrabbit/math (gh CLI already authenticated as `keyrabbit`, confirmed working from an earlier session's memory: `gh auth switch --user keyrabbit` was NOT needed this time — `keyrabbit` was already the active account).
 - Opportunity worth flagging for other projects/tools: Bing/GPT-backed `web_search` conflated "STEAM education market" (science/tech/engineering/arts/math) with "Steam" the Valve gaming platform when asked about Steam-as-a-distribution-channel — had to fall back to general knowledge/reasoning for that specific platform-prioritization call rather than trusting the search result at face value. Worth remembering when using this tool for platform/market-sizing questions with ambiguous acronyms.
 
-<!-- next entries appended below as work continues -->
+## 2026-09-08 — MVP build + polish pass
+- Scaffolded `app/` with Vite + vanilla TypeScript (no framework) — chosen over Flutter/.NET MAUI
+  because neither SDK was installed on this machine and the task called for something buildable
+  and demoable *today*; the engine (`app/src/engine/*`) is written so it can be dropped into a
+  Capacitor (iOS/Android) or Tauri (Windows) shell later without a rewrite.
+- Built the procedural exercise engine (addition/subtraction/multiplication/division/fractions,
+  grade-band + 1-5 difficulty parameterized), a streak-based adaptive mastery tracker, localStorage
+  persistence with a daily free-lesson cap, an original SVG mascot ("Nubble") with mastery-unlocked
+  (not payment-gated) customization, and a lightweight DOM/CSS confetti effect.
+- `npx tsc --noEmit` and `npm run build` both clean on first full pass.
+- **Bug found & root-caused during visual QA**: headless-Edge screenshots taken immediately after
+  page load showed every color washed out to pale pastel (e.g. the primary purple `#7C4DFF`
+  sampled as `rgb(240,243,246)`). Ruled out headless color-profile/dark-mode issues by reproducing
+  correct color on a trivial static HTML page in the same browser. Root cause: the `.screen`
+  container's `fade-up` CSS animation (opacity 0→1 over 0.45s, `animation-fill-mode: both`) was
+  still mid-transition at the instant the screenshot tool captured the frame, uniformly blending
+  every element toward the white background. Fixed verification (not the product) by adding
+  `--virtual-time-budget=3000` to the headless capture command; colors then matched source exactly.
+  **Worth remembering for any future headless visual-regression tooling on this or other
+  projects: entrance animations must be allowed to settle (or disabled) before trusting a headless
+  screenshot's colors.**
+- Built a disposable Puppeteer-core QA harness (`%TEMP%\nn-qa`, not committed) driving real Edge
+  against the production `vite preview` build to walk the entire flow end-to-end: onboarding →
+  home → 6-question lesson → mastery level-up (Addition went level 1→3 within one session) →
+  summary → repeat until the 3/day free-lesson cap → paywall. All screens captured and reviewed;
+  final curated set saved to `docs/screenshots/`. This is real evidence the MVP works, not just
+  that it compiles.
+- Filed 5 GitHub issues for decisions that block real Phase-1 planning: curriculum standard,
+  handwriting recognition build-vs-buy, IP/trademark clearance, monetization-model choice (hard
+  paywall vs. Prodigy-style free-core), and COPPA/legal-compliance ownership.
+- Opportunity/tooling note: `gh repo create ... --source=. --remote=origin` worked cleanly from a
+  freshly `git init`'d folder in one step (no separate `gh repo create` + `git remote add`
+  dance needed) — worth remembering for future new-repo bootstraps.
+- Next milestones (not yet started, tracked as future log entries): none scheduled automatically;
+  Phase 1 native work depends on the open decisions above and, per user instruction, would reuse
+  the Mac bridge/credentials already configured for the sibling PB11iPad project when iOS
+  build/test is actually needed.
