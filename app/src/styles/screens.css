@@ -1,0 +1,818 @@
+/* ============================================================================
+   PIPKIN — screen layouts
+   ========================================================================= */
+
+/* ---------------------------------------------------------------- title */
+
+.title {
+  padding: var(--sp-6) var(--sp-5) calc(var(--sp-7) + env(safe-area-inset-bottom));
+  justify-content: flex-start;
+}
+
+.title__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-top: clamp(var(--sp-5), 6vh, var(--sp-8));
+}
+
+.title__eyebrow {
+  font-size: var(--text-sm);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ember-300);
+  opacity: 0;
+  animation: fade-in 700ms var(--ease-out) 80ms both;
+}
+
+.title__word {
+  display: flex;
+  gap: 0.02em;
+  font-size: var(--text-3xl);
+  letter-spacing: 0.02em;
+  color: var(--paper);
+}
+
+/* Each letter drops in on its own delay, then the whole wordmark is lit from behind. */
+.title__letter {
+  display: inline-block;
+  opacity: 0;
+  animation: letter-in 720ms var(--ease-spring) both;
+  text-shadow:
+    0 4px 0 rgba(10, 7, 22, 0.35),
+    0 0 60px rgba(255, 179, 107, 0.45);
+}
+
+@keyframes letter-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -26px, 0) scale(0.9) rotate(-6deg);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+.title__tagline {
+  font-size: var(--text-md);
+  color: var(--text-dim);
+  opacity: 0;
+  animation: fade-in 800ms var(--ease-out) 640ms both;
+}
+
+.title__play {
+  align-self: center;
+  opacity: 0;
+  animation: rise-in 700ms var(--ease-out) 860ms both;
+}
+
+@keyframes fade-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 22px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title__letter,
+  .title__play,
+  .title__tagline,
+  .title__eyebrow {
+    animation-duration: 1ms;
+    animation-delay: 0ms;
+  }
+}
+
+/* ---------------------------------------------------------------- onboarding */
+
+.ob {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: var(--sp-5) var(--sp-5) calc(var(--sp-6) + env(safe-area-inset-bottom));
+}
+
+/* Reserved band for the canvas-drawn character (and, during the first exercise, the
+   constellation). Giving it a real box in the layout is the only way the copy below can be
+   guaranteed never to overlap it — an earlier build positioned the character at a fixed
+   fraction of viewport height and the headline printed straight across its face. */
+.ob__figure {
+  flex: 1 1 auto;
+  min-height: 150px;
+  pointer-events: none;
+}
+
+.ob__stage {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.ob__beat {
+  gap: var(--sp-4);
+  max-width: 34rem;
+  margin-inline: auto;
+  padding-bottom: clamp(var(--sp-4), 4vh, var(--sp-6));
+}
+
+/* Story lines arrive one after another, at reading pace rather than UI pace. */
+.ob__line {
+  opacity: 0;
+  animation: rise-in 620ms var(--ease-out) both;
+}
+
+.ob__line--2 {
+  animation-delay: 420ms;
+}
+
+.ob__line--3 {
+  animation-delay: 900ms;
+}
+
+.ob__equation {
+  font-size: var(--text-2xl);
+  margin-block: var(--sp-2);
+}
+
+.ob__tiles {
+  grid-template-columns: repeat(3, 1fr);
+  width: min(420px, 88vw);
+}
+
+.ob__choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  width: min(420px, 90vw);
+}
+
+.ob__choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--sp-4) var(--sp-5);
+  text-align: left;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ob__choice:hover {
+    border-color: rgba(255, 179, 107, 0.6);
+    box-shadow: var(--shadow-lg), var(--glow-accent);
+  }
+}
+
+.ob__choice:active {
+  transform: scale(0.975);
+}
+
+.ob__choiceLabel {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-lg);
+}
+
+.ob__choiceNote {
+  font-size: var(--text-sm);
+}
+
+/* ---------------------------------------------------------------- lesson */
+
+.lesson {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr auto;
+  height: 100%;
+  padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom));
+}
+
+/* Reserves the upper band where the constellation is drawn on canvas, so the DOM
+   layout and the canvas composition stay in agreement at every screen size. */
+.lesson__sky {
+  height: clamp(120px, 26vh, 260px);
+  pointer-events: none;
+}
+
+.lesson__title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-bottom: var(--sp-2);
+}
+
+.lesson__constellation {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-lg);
+  text-shadow: 0 0 32px rgba(255, 179, 107, 0.4);
+}
+
+.lesson__sub {
+  font-size: var(--text-sm);
+}
+
+.lesson__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  gap: var(--sp-1);
+}
+
+.lesson__prompt {
+  min-height: 1.5em;
+  text-align: center;
+  padding-inline: var(--sp-4);
+  text-wrap: balance;
+}
+
+.lesson__input {
+  padding-top: var(--sp-3);
+}
+
+.ladder__tick {
+  color: var(--positive);
+  margin-left: 0.25em;
+}
+
+/* On short/landscape screens the constellation band and ladder must both shrink,
+   or the keypad is pushed off the bottom. */
+@media (max-height: 700px) {
+  .lesson__sky {
+    height: clamp(90px, 18vh, 150px);
+  }
+  .ladder {
+    gap: 0;
+    padding: var(--sp-2) 0;
+  }
+  .ladder__row[data-role="active"] {
+    font-size: clamp(2rem, 6vw, 3rem);
+  }
+  .key {
+    min-height: 46px;
+    aspect-ratio: 1.7;
+  }
+}
+
+/* ---------------------------------------------------------------- map */
+
+.map {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  height: 100%;
+  padding: var(--sp-4) var(--sp-5) calc(var(--sp-4) + env(safe-area-inset-bottom));
+}
+
+.map__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.map__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.map__subtitle {
+  font-size: var(--text-sm);
+}
+
+.map__chip {
+  flex-shrink: 0;
+}
+
+/* The trail scrolls; nodes are absolutely positioned from JS over the trail canvas
+   that lives inside it, so both move together with no scroll syncing. */
+.map__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-inline: calc(var(--sp-5) * -1);
+  padding-inline: var(--sp-5);
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  /* Fade the trail out at both ends so it reads as continuing beyond the frame. */
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 44px, #000 calc(100% - 52px), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 44px, #000 calc(100% - 52px), transparent 100%);
+}
+
+.map__scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.map__path {
+  position: relative;
+  width: 100%;
+}
+
+.map__trail {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.mapnode {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  border-radius: var(--r-lg);
+  transition:
+    filter var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out);
+}
+
+.mapnode__disc {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: rgba(10, 7, 22, 0.55);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+
+.mapnode__number {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-lg);
+}
+
+.mapnode:active .mapnode__disc {
+  transform: scale(0.92);
+}
+
+.mapnode[data-state="next"] .mapnode__disc {
+  border-color: var(--ember-400);
+  box-shadow: var(--glow-accent);
+}
+
+.mapnode[data-state="complete"] .mapnode__disc {
+  border-color: rgba(127, 224, 176, 0.7);
+  box-shadow: 0 0 24px rgba(127, 224, 176, 0.35);
+}
+
+/* Sealed: the whole family is permanent. Warm gold, not green — a different achievement. */
+.mapnode[data-state="sealed"] .mapnode__disc {
+  border-color: rgba(255, 215, 130, 0.85);
+  box-shadow: 0 0 30px rgba(255, 215, 130, 0.45);
+}
+
+.mapnode[data-state="open"] {
+  opacity: 0.76;
+}
+
+.mapnode__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: var(--text-xs);
+  line-height: 1.2;
+  text-align: center;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
+}
+
+.mapnode__name {
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.mapnode__progress {
+  color: var(--text-faint);
+}
+.map__actions {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------- summary */
+
+.summary {
+  padding: var(--sp-5);
+  justify-content: center;
+}
+
+.summary__panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-6) var(--sp-5);
+  width: min(520px, 92vw);
+  text-align: center;
+  /* Sits below the constellation drawn on canvas above it. */
+  margin-top: clamp(120px, 22vh, 240px);
+}
+
+.summary__eyebrow {
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+}
+
+.summary__sub {
+  font-size: var(--text-sm);
+  text-wrap: balance;
+}
+
+.summary__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: var(--sp-3);
+  width: 100%;
+  margin-block: var(--sp-2);
+}
+
+.summary__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.summary__statValue {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-xl);
+  color: var(--ember-300);
+}
+
+.summary__statLabel {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.summary__recap {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2);
+}
+
+.summary__fact {
+  padding: 0.25em 0.7em;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.07);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.summary__fact[data-ok="0"] {
+  color: var(--ember-300);
+  background: rgba(255, 179, 107, 0.14);
+}
+
+.summary__actions {
+  margin-top: var(--sp-2);
+}
+
+/* ---------------------------------------------------------------- atlas */
+
+.atlas {
+  padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom));
+}
+
+.atlas__intro {
+  padding: 0 var(--sp-5) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.atlas__intro .dim {
+  font-size: var(--text-sm);
+  max-width: 42rem;
+}
+
+.atlas__scroll {
+  overflow-y: auto;
+  padding: 0 var(--sp-5) var(--sp-6);
+  -webkit-overflow-scrolling: touch;
+}
+
+.atlas__chapter {
+  font-size: var(--text-md);
+  margin-top: var(--sp-5);
+  margin-bottom: var(--sp-2);
+  color: var(--text-dim);
+}
+
+.atlas__chapterCount {
+  font-size: var(--text-sm);
+}
+
+.atlas__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: var(--sp-3);
+}
+
+.atlas__cell {
+  aspect-ratio: 1;
+  position: relative;
+  border-radius: var(--r-lg);
+  background: rgba(10, 7, 22, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    border-color var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-out);
+}
+
+.atlas__cell:active {
+  transform: scale(0.95);
+}
+
+.atlas__cell[data-state="complete"] {
+  border-color: rgba(255, 179, 107, 0.45);
+  background: rgba(255, 179, 107, 0.07);
+}
+
+.atlas__cell[data-state="empty"] {
+  opacity: 0.55;
+}
+
+.atlas__cellNumber {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-sm);
+  color: var(--text-faint);
+}
+
+.atlas__detail {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--sp-4) + env(safe-area-inset-bottom));
+  width: min(460px, 92vw);
+  padding: var(--sp-4) var(--sp-5);
+  transform: translate3d(-50%, 130%, 0);
+  opacity: 0;
+  transition:
+    transform var(--dur-slow) var(--ease-drawer),
+    opacity var(--dur-base) var(--ease-out);
+  pointer-events: none;
+}
+
+.atlas__detail[data-open="1"] {
+  transform: translate3d(-50%, 0, 0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.atlas__detailTitle {
+  font-size: var(--text-lg);
+}
+
+.atlas__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.atlas__fact {
+  padding: 0.25em 0.7em;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-faint);
+}
+
+.atlas__fact[data-lit="1"] {
+  background: rgba(255, 179, 107, 0.18);
+  color: var(--ember-300);
+}
+
+/* ---------------------------------------------------------------- parents */
+
+.parents {
+  padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom));
+}
+
+.parents__scroll {
+  overflow-y: auto;
+  padding: 0 var(--sp-5) var(--sp-7);
+}
+
+.parents__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  max-width: 44rem;
+  margin-inline: auto;
+}
+
+.parents__question {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-lg);
+  margin-top: var(--sp-3);
+}
+
+.parents__gateRow {
+  align-items: stretch;
+}
+
+.parents__input {
+  flex: 0 0 120px;
+  padding: 0 var(--sp-4);
+  min-height: 56px;
+  border-radius: var(--r-pill);
+  border: 1.5px solid var(--surface-line);
+  background: rgba(10, 7, 22, 0.5);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-lg);
+  text-align: center;
+}
+
+.parents__error {
+  min-height: 1.4em;
+  color: var(--ember-300);
+}
+
+.parents__h2 {
+  font-size: var(--text-md);
+  color: var(--text-dim);
+  margin-top: var(--sp-3);
+}
+
+.parents__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--sp-3);
+}
+
+.parents__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-4);
+}
+
+.parents__statValue {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-xl);
+  color: var(--ember-300);
+}
+
+.parents__statLabel {
+  font-size: var(--text-sm);
+}
+
+.parents__statNote {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.parents__chart {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  height: 120px;
+  padding: var(--sp-3);
+  border-radius: var(--r-lg);
+  background: rgba(10, 7, 22, 0.35);
+}
+
+.parents__bar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  height: 100%;
+  gap: var(--sp-1);
+}
+
+.parents__barFill {
+  width: 100%;
+  min-height: 3px;
+  border-radius: var(--r-sm);
+  background: linear-gradient(180deg, var(--ember-300), var(--ember-500));
+  transition: height var(--dur-slow) var(--ease-out);
+}
+
+.parents__barLabel {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.parents__facts,
+.parents__settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.parents__settings {
+  flex-direction: column;
+}
+
+.parents__fact {
+  padding: 0.3em 0.8em;
+  border-radius: var(--r-pill);
+  background: rgba(255, 179, 107, 0.14);
+  color: var(--ember-300);
+  font-weight: 800;
+  font-size: var(--text-sm);
+}
+
+.parents__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.parents__section .dim {
+  font-size: var(--text-sm);
+}
+
+.parents__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--surface-line);
+}
+
+.parents__toggleLabel {
+  font-weight: 700;
+}
+
+.parents__switch {
+  position: relative;
+  width: 52px;
+  height: 30px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.14);
+  transition: background-color var(--dur-base) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.parents__toggle[data-on="1"] .parents__switch {
+  background: var(--ember-500);
+}
+
+.parents__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+
+.parents__toggle[data-on="1"] .parents__knob {
+  transform: translateX(22px);
+}

@@ -1,0 +1,457 @@
+/* ============================================================================
+   PIPKIN — components
+   ========================================================================= */
+
+/* ---------------------------------------------------------------- buttons */
+
+.btn {
+  --btn-bg: var(--surface-raised);
+  --btn-fg: var(--text);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: 0.85em 1.6em;
+  min-height: 56px;
+  border-radius: var(--r-pill);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-md);
+  letter-spacing: 0.01em;
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  /* Enumerate the properties. `transition: all` will eventually animate
+     something you did not intend, at a cost you cannot see. */
+  transition:
+    transform var(--dur-instant) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-out),
+    filter var(--dur-base) var(--ease-out);
+  will-change: transform;
+}
+
+/* A subtle top-edge highlight — the difference between a rectangle and a
+   physical object. */
+.btn::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 55%);
+  pointer-events: none;
+}
+
+/* Hover is gated: on touch devices a sticky hover state looks like a bug. */
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover {
+    filter: brightness(1.08);
+    box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+}
+
+.btn:active {
+  transform: scale(0.965);
+  transition-duration: var(--dur-instant);
+}
+
+.btn[disabled] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.btn--primary {
+  --btn-bg: linear-gradient(180deg, var(--ember-400), var(--ember-600));
+  --btn-fg: #2b1206;
+  box-shadow: var(--shadow-md), var(--glow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn--ghost {
+  --btn-bg: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+  border: 1.5px solid var(--surface-line);
+}
+
+.btn--large {
+  min-height: 68px;
+  font-size: var(--text-lg);
+  padding: 0.9em 2.2em;
+}
+
+.btn--icon {
+  min-height: 48px;
+  width: 48px;
+  padding: 0;
+  border-radius: var(--r-pill);
+}
+
+/* ---------------------------------------------------------------- surfaces */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--surface-line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  /* Backdrop blur is what lets the canvas world show through without the text
+     losing contrast. Kept modest so it stays cheap on tablets. */
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.card {
+  background: var(--surface-raised);
+  border: 1px solid var(--surface-line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+}
+
+/* ---------------------------------------------------------------- HUD */
+
+.hud {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  pointer-events: auto;
+}
+
+.hud__spacer {
+  flex: 1;
+}
+
+.hud__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0.4em 0.9em 0.4em 0.5em;
+  border-radius: var(--r-pill);
+  background: rgba(10, 7, 22, 0.5);
+  border: 1px solid var(--surface-line);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.hud__chip .dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3d0, var(--ember-400) 60%, var(--ember-600));
+  box-shadow: 0 0 14px rgba(255, 179, 107, 0.8);
+}
+
+/* The counter itself scales up briefly when it changes — a "value landed" cue
+   that costs one class toggle. */
+.hud__value {
+  display: inline-block;
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+
+.hud__value[data-bump="1"] {
+  transform: scale(1.28);
+}
+
+/* Segmented progress — mirrors the reference app's clearest UI idea, but each
+   segment fills rather than snapping, so partial progress is visible. */
+.segments {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  max-width: 420px;
+  height: 10px;
+}
+
+.segment {
+  flex: 1;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  position: relative;
+}
+
+.segment::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--ember-300), var(--ember-500));
+  transform: scaleX(var(--fill, 0));
+  transform-origin: left;
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+
+.segment[data-state="done"]::after {
+  background: linear-gradient(90deg, var(--leaf-400), var(--leaf-500));
+}
+
+/* ---------------------------------------------------------------- the ladder */
+
+/* The fact-family ladder. Solved rows drift up and dim; the active row is the
+   only fully-lit thing on screen. */
+.ladder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-4) 0;
+}
+
+.ladder__row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  font-family: var(--font-display);
+  font-weight: 800;
+  white-space: nowrap;
+  transition:
+    opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out),
+    filter var(--dur-slow) var(--ease-out);
+}
+
+.ladder__row[data-role="done"] {
+  font-size: var(--text-lg);
+  opacity: 0.42;
+  color: var(--positive);
+  filter: blur(0.3px);
+}
+
+.ladder__row[data-role="upcoming"] {
+  font-size: var(--text-lg);
+  opacity: 0.26;
+  filter: blur(1.2px);
+}
+
+.ladder__row[data-role="active"] {
+  font-size: var(--text-numeral);
+  opacity: 1;
+  text-shadow: 0 0 40px rgba(255, 179, 107, 0.35);
+}
+
+/* The answer slot. Empty state breathes so the child knows where to look. */
+.slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.9em;
+  padding: 0 0.15em;
+  height: 1.32em;
+  border-radius: var(--r-md);
+  background: rgba(10, 7, 22, 0.45);
+  border: 3px solid rgba(255, 179, 107, 0.5);
+  box-shadow: inset 0 0 24px rgba(255, 179, 107, 0.12);
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+
+.slot[data-empty="1"] {
+  animation: slot-breathe 2.6s var(--ease-in-out) infinite;
+}
+
+@keyframes slot-breathe {
+  0%,
+  100% {
+    border-color: rgba(255, 179, 107, 0.35);
+    box-shadow: inset 0 0 24px rgba(255, 179, 107, 0.1);
+  }
+  50% {
+    border-color: rgba(255, 179, 107, 0.75);
+    box-shadow: inset 0 0 34px rgba(255, 179, 107, 0.22);
+  }
+}
+
+.slot[data-status="correct"] {
+  border-color: var(--leaf-400);
+  background: rgba(69, 199, 141, 0.18);
+  box-shadow: 0 0 44px rgba(127, 224, 176, 0.4), inset 0 0 24px rgba(127, 224, 176, 0.2);
+  transform: scale(1.06);
+  animation: none;
+}
+
+/* A miss shakes gently and dims. No red, no buzzer, no "wrong". */
+.slot[data-status="retry"] {
+  border-color: rgba(255, 216, 168, 0.65);
+  animation: slot-nudge 420ms var(--ease-out);
+}
+
+@keyframes slot-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-7px);
+  }
+  45% {
+    transform: translateX(5px);
+  }
+  70% {
+    transform: translateX(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slot[data-empty="1"],
+  .slot[data-status="retry"] {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- keypad */
+
+/* A real keypad rather than handwriting recognition. The reference app's
+   handwriting input is its most-complained-about feature ("I wrote 1 and it
+   said 7"); a large, physical, unambiguous keypad respects the child's time. */
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-2);
+  width: min(340px, 82vw);
+  margin-inline: auto;
+}
+
+.key {
+  aspect-ratio: 1.45;
+  min-height: 54px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, rgba(73, 48, 121, 0.95), rgba(38, 24, 71, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-xl);
+  color: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform var(--dur-instant) var(--ease-out),
+    filter var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .key:hover {
+    filter: brightness(1.15);
+  }
+}
+
+.key:active {
+  transform: scale(0.93);
+  filter: brightness(1.3);
+  box-shadow: var(--shadow-sm), inset 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.key--wide {
+  grid-column: span 1;
+  font-size: var(--text-lg);
+}
+
+.key--go {
+  background: linear-gradient(180deg, var(--ember-400), var(--ember-600));
+  color: #2b1206;
+  box-shadow: var(--shadow-md), var(--glow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* ---------------------------------------------------------------- tiles */
+
+.tiles {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  width: min(560px, 92vw);
+  margin-inline: auto;
+}
+
+.tile {
+  padding: var(--sp-4);
+  min-height: 84px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, rgba(73, 48, 121, 0.9), rgba(38, 24, 71, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-xl);
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    box-shadow var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
+}
+
+.tile:active {
+  transform: scale(0.95);
+}
+
+.tile[data-status="correct"] {
+  background: linear-gradient(180deg, rgba(127, 224, 176, 0.9), rgba(69, 199, 141, 0.9));
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #06281a;
+  box-shadow: 0 0 46px rgba(127, 224, 176, 0.5);
+  transform: scale(1.04);
+}
+
+.tile[data-status="retry"] {
+  opacity: 0.42;
+  transform: scale(0.97);
+}
+
+/* ---------------------------------------------------------------- misc */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.grow {
+  flex: 1;
+  min-height: 0;
+}
+
+.dim {
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.prompt {
+  font-size: var(--text-md);
+  color: var(--text-dim);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Headline "sticker" treatment: a heavy rounded face with a warm halo rather
+   than the hard black outline the reference app uses. Softer, more premium,
+   still legible over a busy sky. */
+.headline {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-2xl);
+  line-height: 1.05;
+  text-wrap: balance;
+  text-shadow:
+    0 2px 0 rgba(10, 7, 22, 0.4),
+    0 0 48px rgba(255, 179, 107, 0.3);
+}
