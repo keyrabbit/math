@@ -190,12 +190,17 @@ RESULT: PASS
 
 ### Sideloading onto a Fire tablet
 
+For someone who just wants to try it, the built APK is published as a prerelease:
+<https://github.com/keyrabbit/math/releases/tag/bakery-v0.1.0-test>. Open that page in the
+tablet's Silk browser, allow **Settings → Security & Privacy → Apps from Unknown Sources** for
+Silk, and install the download. No PC or cable involved.
+
+Over USB instead:
+
 1. On the tablet: **Settings → Device Options → About Fire Tablet**, tap the serial number seven
    times to reveal Developer Options, then enable **ADB Debugging**.
 2. Connect over USB and accept the trust prompt.
 3. `.\tools\Invoke-AndroidBuild.ps1 -Action Install`
-
-Or copy the APK across and open it, having allowed installation from unknown sources.
 
 The debug APK is signed with the standard Android debug key, which is sufficient for sideloading.
 It is deliberately kept debuggable so `chrome://inspect` remote WebView debugging works on real
