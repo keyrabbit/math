@@ -1,0 +1,20 @@
+{
+  "name": "app-bakery",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5174",
+    "build": "tsc && vite build",
+    "preview": "vite preview --port 5174",
+    "build:native": "tsc && vite build --base=./ --outDir dist-native"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2"
+  },
+  "dependencies": {
+    "@fontsource-variable/nunito": "^5.3.0",
+    "@fontsource/baloo-2": "^5.3.0"
+  }
+}

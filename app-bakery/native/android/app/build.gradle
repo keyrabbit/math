@@ -1,0 +1,97 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.keyrabbit.crumbsbakery'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.keyrabbit.crumbsbakery"
+        // Fire OS 5 is Android 5.1 (API 22). Going this low costs nothing here — the app is a
+        // WebView and some plain resources — and it covers every Fire tablet still in use.
+        minSdk 22
+        // Fire OS 8 is Android 11 (API 30). Targeting 34 is fine: Amazon requires a recent target
+        // for store submission and Fire OS runs higher-target apps in compatibility mode.
+        targetSdk 34
+        versionCode 1
+        versionName "0.1.0"
+    }
+
+    buildTypes {
+        debug {
+            // Sideload builds are debuggable so `adb logcat` and remote WebView inspection work
+            // on a real Fire tablet, which is the only way to diagnose layout on that hardware.
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // The web build output is copied here by the `syncWebAssets` task below rather than being
+    // checked in twice.
+    sourceSets {
+        main {
+            assets.srcDirs += ["$buildDir/webassets"]
+        }
+    }
+
+    lint {
+        abortOnError false
+    }
+}
+
+dependencies {
+    // Since Kotlin 1.8 the -jdk7/-jdk8 artefacts are empty shims merged into kotlin-stdlib, but
+    // AndroidX modules still pull older pinned versions transitively, which collide as duplicate
+    // classes at dex time. Aligning all three on one version is the documented fix. There is no
+    // Kotlin in this app; these arrive purely through AndroidX.
+    constraints {
+        implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+        implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+        implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+    }
+
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.activity:activity:1.8.0'
+    // WebViewAssetLoader: serves bundled assets from an https origin so localStorage works.
+    implementation 'androidx.webkit:webkit:1.9.0'
+}
+
+/**
+ * Copy the Vite production build into the APK.
+ *
+ * The web app is built on the developer machine (`npm run build:native`) and its `dist-native/` is the single
+ * source of truth for both native shells. Copying at assemble time means the APK can never ship a
+ * stale bundle, and the web project never has to know Android exists.
+ */
+tasks.register('syncWebAssets', Copy) {
+    from rootProject.file('../../dist-native')
+    into "$buildDir/webassets/www"
+    // Fail loudly rather than shipping an empty app if someone forgets to build the web layer.
+    doFirst {
+        def dist = rootProject.file('../../dist-native')
+        if (!dist.exists() || (dist.listFiles()?.length ?: 0) == 0) {
+            throw new GradleException(
+                "No web build found at ${dist.canonicalPath}.\n" +
+                "Run `npm run build:native` in app-bakery/ before assembling the APK.")
+        }
+    }
+}
+
+tasks.configureEach { task ->
+    if (task.name.startsWith('merge') && task.name.endsWith('Assets')) {
+        task.dependsOn 'syncWebAssets'
+    }
+}
+
+

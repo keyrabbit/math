@@ -1,0 +1,13 @@
+# core.autocrlf would otherwise rewrite these on checkout. A CRLF `gradlew` fails on macOS and
+# Linux with "bad interpreter", and CRLF inside a script sent over SSH makes zsh read `fi\r` as a
+# word rather than the keyword.
+* text=auto
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Binary, so never touched.
+*.png binary
+*.jar binary
+*.woff binary
+*.woff2 binary
+

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Oven-dark, matching the web app's ink-900 token so there is no white flash on launch. -->
+    <color name="ink900">#FF150A06</color>
+    <color name="amber">#FFFFB15F</color>
+</resources>
+

@@ -1,0 +1,43 @@
+name: CrumbsBakery
+options:
+  bundleIdPrefix: com.keyrabbit
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    # No third-party code at all, so there is nothing to sign but our own bundle.
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+targets:
+  CrumbsBakery:
+    type: application
+    platform: iOS
+    # Universal: the game is designed for tablet first but has a real phone breakpoint.
+    deploymentTarget: "15.0"
+    sources:
+      - path: Sources
+        excludes:
+          - "Info.plist"
+      - path: Resources/www
+        type: folder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.keyrabbit.crumbsbakery
+        # Deliberately apostrophe-free: PRODUCT_NAME becomes the executable name and feeds
+        # shell-quoted build settings. The apostrophe lives in CFBundleDisplayName instead,
+        # which is what the home screen actually shows.
+        PRODUCT_NAME: CrumbsBakery
+        INFOPLIST_FILE: Sources/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # Simulator test builds are unsigned on purpose; a device build needs an owner-supplied
+        # team and is tracked separately.
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO

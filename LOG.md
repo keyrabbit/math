@@ -216,3 +216,130 @@ by reasoning. None would have been caught by a type checker or a unit test.
   instead of a paywall at 90 seconds, $4.99/mo or $29.99/yr, a $39.99 one-time unlock that
   always exists, and **no weekly tier** ($9.99/week is $519/year, and it is why their
   reviews are full of angry parents).
+
+
+## 2026-09-09 — Second MVP: Crumb's Bakery
+
+**Why.** Demoing the Pipkin build produced one clear piece of feedback: *the story is a bit hard
+for a five-year-old*. It is. "The counting-stars fell from the sky and scattered as pips, and you
+relight the constellations" is an abstraction resting on two other abstractions — the child has to
+learn the story before the story can help them learn the maths. Three alternative narratives were
+proposed (Sprout's Garden, Bubbles the Fish, Crumb's Bakery); the bakery was chosen and built as a
+**separate, parallel MVP** in `app-bakery/`. `app/` is untouched — verified with `git status`.
+
+**What was built.** A complete re-theme, not a reskin. Every term the child sees was replaced:
+constellation → recipe, star → treat, pip → sprinkle, Star Atlas → Bakery Case, biome → room,
+lit/fading/sealed → fresh/stale/house special. Chapters became The Little Kitchen, The Pantry, The
+Morning Market, The Bakehouse and The Party Room. `render/pipkin.ts` → `render/crumb.ts`,
+`render/constellation.ts` → `render/shelf.ts` + `render/treats.ts`, `screens/atlas.ts` →
+`screens/case.ts`. Palette moved from indigo night to roast-brown-and-amber oven light. New docs:
+`GAME-DESIGN-BAKERY.md` and `app-bakery/README.md`. Runs on :5174 alongside :5173.
+
+**The finding that made it worth doing.** The pedagogy, the scheduler, the spring rig, the canvas
+world and the screen architecture all came across essentially unchanged. `game/mastery.ts` needed
+renames and not one changed interval. **The theme is not the expensive part of this build** — which
+is exactly the thing you want to know before commissioning art for one narrative.
+
+**One real pedagogical improvement fell out of the re-theme.** Pipkin laid its stars on a seeded
+spiral: pretty, but arbitrary. The bakery shelf is a **grid**, and the grid puts a fact family's
+additions directly above the subtractions that undo them. The inverse relationship is now visible
+in the layout itself rather than only in the sequence. Worth back-porting.
+
+**Bugs the visual QA pass caught (all invisible in code review):**
+
+1. **Apron straps ran across Crumb's face.** A one-circle character has no shoulders, so straps
+   drawn from bib to head land on the cheeks and read as red slashes. Bib trim line instead.
+2. **Treats floated above the plank.** The plank y was hard-coded at 0.92 unit space, but a pie,
+   a bun and a doughnut all rest at different heights. Exported `TREAT_BASE` per shape.
+3. **The active-slot indicator read as a grey smudge.** A large soft radial gradient over a dark
+   background does not read as light, it reads as dirt. Tight lit ellipse plus a light cone.
+4. **Shelf thumbnails spilled outside their order-ticket discs.** `drawStatic` needed a second
+   fit pass measuring `radius*k + size*0.95` against the disc radius.
+5. **"Sugar Cookies" were plated as buns.** Shape was seeded from the recipe key rather than its
+   name. A child who can read the ticket notices immediately.
+6. **The keypad fell off the bottom at 780×420.** Added a `max-height: 560px` breakpoint and a
+   two-column landscape grid.
+
+**The battlement problem — three passes, worth recording.** The backdrop silhouette started as
+stepped flat-topped runs, the obvious rectilinear translation of Pipkin's rolling hills. It read
+unmistakably as **castle battlements** in every screenshot. Widening the runs did not fix it.
+Dropping from four height steps to two did not fix it. Shrinking the jars did not fix it. The
+actual cause is that crenellation *is* a regular up-down at constant amplitude, so any stepped
+horizon at a fixed step height reads as a castle no matter how the widths are tuned. The fix was
+to **delete the steps entirely**: each plank is one dead-flat horizontal, and all silhouette
+interest comes from varied crockery standing on it — jars with lids, wide shallow bowls, tall
+narrow bottles, short knobbed tins. Long horizontals broken by objects of different heights is
+what shelving actually looks like. Generalisable: *when a silhouette reads as the wrong object,
+tune the thing that is varying, not the thing that is constant.*
+
+**On a theme picker.** Deliberately not shipping one. Two selectable stories double the art, copy,
+QA and localisation surface forever in exchange for a preference nobody has asked for. The
+architecture now demonstrably supports many themes; hold the option until a real child bounces off
+one and engages with the other. Build for many, ship one.
+
+---
+
+## 2026-09-09 — Packaging: a Kindle Fire APK and an iPad build
+
+Crumb's Bakery is a web app; it now also runs as a native app on both tablet ecosystems. Two
+hand-written WebView shells, no Capacitor, no Cordova. Details in `app-bakery/native/README.md`.
+
+**Capacitor was the obvious choice and was rejected.** Its iOS platform requires CocoaPods, which
+is not installed on the Mac this project borrows for iOS builds, and installing a package manager
+on a machine we do not own is not something to do casually. The shells turned out to be small —
+one Java file and three Swift files — and they preserve the project's zero-runtime-dependency
+property. The decision paid for itself immediately: because nothing was hidden behind a framework,
+both of the real bugs below were visible.
+
+**Bug 1: `file://` would have silently destroyed every save.** `localStorage` is the entire
+save system. A WebView loading `file://` gets an opaque origin, and storage on an opaque origin
+is unreliable across OS versions — sometimes empty on relaunch, sometimes throwing. Android now
+serves the bundle through `WebViewAssetLoader` on `https://appassets.androidplatform.net`;
+iOS through a custom `bakery://app/` scheme handler. Both are now *verified* rather than
+assumed: the build scripts assert the key `crumbs-bakery.save.v1` is physically on disk after a
+launch, and it is — real save JSON in the Chromium LevelDB on Android, the key present in the
+WebKit sqlite on iOS.
+
+A side effect worth keeping: every request the page makes resolves inside the app bundle. There is
+no code path from the page to the network at all. For a children's app that is a structural
+property rather than a promise.
+
+**Bug 2: the first APK rendered nothing, and looked completely healthy doing it.** It installed,
+launched, drew the brown background and stopped. No crash, no ANR, process alive. The only
+evidence anywhere was one line of `adb logcat`:
+
+`[INFO:CONSOLE(1)] "Uncaught SyntaxError: Unexpected token '='"`
+
+Vite's default build target assumes an evergreen browser. A Fire tablet is not evergreen. The API
+30 emulator ships Android System WebView 83; logical assignment (`??=`, `||=`) needs Chrome 85.
+The app was one operator away from a blank screen on real hardware, and nothing in the browser
+would ever have shown it. `vite.config.ts` now pins `build.target: "es2017"`, and
+`index.html` carries a `nomodule` fallback so a genuinely ancient WebView says so in words
+instead of showing a brown void.
+
+Generalisable: *a WebView is not the browser you developed in, and its failure mode is silence.*
+Any web app shipped natively needs a device-console check in the loop, not just a screenshot.
+
+**Both round trips are scripted, because a build you cannot repeat is a demo.**
+`tools/Invoke-AndroidBuild.ps1` and `tools/Invoke-MacBuild.ps1` each do preflight, build,
+install, launch, screenshot and a storage assertion. The Mac one drives Xcode over SSH and fetches
+XcodeGen as a self-contained binary into a scratch directory, so the borrowed machine gets nothing
+installed and `-Action Clean` removes all trace.
+
+Three smaller things that cost real time and are worth not rediscovering:
+
+1. **`winget` blocks forever on an elevation prompt** in a non-interactive shell. The whole
+   Windows toolchain — JDK 17, Android SDK, Gradle — is portable zips under `C:\UsrP\toolchain`,
+   needs no administrator rights, and can be deleted wholesale.
+2. **PowerShell here-strings sent over SSH carry CRLF**, and zsh reads `fi\r` as a word rather
+   than the keyword, so an `if` block never closes and fails as a parse error several lines
+   later. `Invoke-Remote` strips `\r` centrally.
+3. **`-destination 'name=...'` is not reliable for simulators.** Which device names exist depends
+   on which runtimes are installed, so xcodebuild can refuse a device that `simctl` happily
+   lists. Resolve to a UDID from `-showdestinations` instead.
+
+Verified: Android builds, launches and renders correctly on an API 30 tablet emulator at
+2560x1800, hardware back behaves, and save data survives exiting the app. iOS builds, launches and
+renders correctly on an iPad Air 11-inch (M4) running iOS 26.5, and storage persists across
+backgrounding. Still open: no physical Fire tablet on hand for the final sideload, and an iOS
+*device* build needs an Apple team ID that does not exist yet — simulator only until it does.

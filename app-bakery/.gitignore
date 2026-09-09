@@ -1,0 +1,15 @@
+node_modules/
+dist/
+dist-native/
+.vite/
+*.log
+.DS_Store
+
+# Native shells: everything here is generated from dist-native at build time.
+native/android/.gradle/
+native/android/build/
+native/android/app/build/
+native/android/local.properties
+native/ios/Resources/www/
+native/ios/*.xcodeproj/
+native/ios/build/
