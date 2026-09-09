@@ -1,0 +1,16 @@
+# Project log / memory
+
+Running log of milestones, learnings, bugs, and opportunities. Newest entries at the bottom.
+
+## 2026-09-08 — Research phase
+- Studied the target app ("Math Learner: Learning Game", iOS id1148728253) via App Store listing text, user reviews, and third-party trackers (Sensor Tower, AppAgg, JustUseApp). Publisher is Wildlife Studios (not "Chocolate Apps" as some aggregators claim — flagging that stale/incorrect attributions are common on ASO trackers, worth double-checking any single source).
+- Learned the app's real differentiator is the drawn-digit "handwriting recognition" answer input plus a pet/avatar meta-loop — not the exercise content itself, which is standard K-5 arithmetic.
+- Found the app's most common 1★ complaints are about an aggressive/early paywall and confusing subscription cancellation — a direct, actionable lesson for our own monetization design (see PLAN.md §4).
+- Compared against SplashLearn, Prodigy Math, DragonBox, Todo Math, Monster Math, Photomath, Khan Academy Kids. Key insight: the two apps with $25-35M/yr revenue (SplashLearn, Prodigy) both grew via **school/teacher distribution**, not paid-search/ASO alone — that's a different company motion than what a small team can bootstrap. Math Learner itself, more modestly, appears to sustain roughly high-5-to-low-6-figure annual revenue on iOS alone as a "just" a well-executed paid app — that's the realistic, provable-by-an-MVP target.
+- Checked local tooling: no Flutter/Xcode/Android SDK on this Windows dev machine; .NET 10 SDK, Node 24, Python 3.11 are available. Decided MVP will be a TypeScript/Vite web app (buildable today, zero extra SDK installs) designed so the core "engine" (exercise generation, mastery model, content schema) is portable into Capacitor (iOS/Android) and Tauri (Windows) shells later without a rewrite.
+- User instruction: MVP must match the reference app's visual/production polish — not a bare-bones prototype. This raises MVP effort (custom illustrated mascot via SVG, animation/juice, kid-friendly type) above what a purely functional prototype would need; budgeted extra design pass accordingly.
+- User instruction: if/when native iOS build/test is needed, reuse the existing Mac bridge/credentials already set up for the sibling project at C:\Usr\PB11iPad (see its docs/MAC-SETUP.md and tools/Invoke-Mac.ps1 / mac-remote.sh) rather than provisioning new Mac access. Not needed yet for the web MVP; recorded here so Phase-1 (iOS) work picks it up.
+- Created public repo github.com/keyrabbit/math (gh CLI already authenticated as `keyrabbit`, confirmed working from an earlier session's memory: `gh auth switch --user keyrabbit` was NOT needed this time — `keyrabbit` was already the active account).
+- Opportunity worth flagging for other projects/tools: Bing/GPT-backed `web_search` conflated "STEAM education market" (science/tech/engineering/arts/math) with "Steam" the Valve gaming platform when asked about Steam-as-a-distribution-channel — had to fall back to general knowledge/reasoning for that specific platform-prioritization call rather than trusting the search result at face value. Worth remembering when using this tool for platform/market-sizing questions with ambiguous acronyms.
+
+<!-- next entries appended below as work continues -->
