@@ -1,5 +1,5 @@
 import { audio } from "../core/audio";
-import { el, stagger, wait } from "../core/dom";
+import { el, setChildren, stagger, wait } from "../core/dom";
 import { ticker } from "../core/ticker";
 import { ShelfView } from "../render/shelf";
 import type { ScreenInstance, World } from "../world";
@@ -44,7 +44,7 @@ export function makeOnboardingScreen(world: World): ScreenInstance {
   // ------------------------------------------------------------------ steps
 
   function renderStory(): void {
-    stage.replaceChildren(
+    setChildren(stage, 
       el(
         "div",
         { class: "ob__beat center" },
@@ -71,7 +71,7 @@ export function makeOnboardingScreen(world: World): ScreenInstance {
   }
 
   function renderMeet(): void {
-    stage.replaceChildren(
+    setChildren(stage, 
       el(
         "div",
         { class: "ob__beat center" },
@@ -159,7 +159,7 @@ export function makeOnboardingScreen(world: World): ScreenInstance {
       tiles.appendChild(tile);
     }
 
-    stage.replaceChildren(
+    setChildren(stage, 
       el(
         "div",
         { class: "ob__beat center" },
@@ -211,7 +211,7 @@ export function makeOnboardingScreen(world: World): ScreenInstance {
       );
     }
 
-    stage.replaceChildren(
+    setChildren(stage, 
       el(
         "div",
         { class: "ob__beat center" },
@@ -228,7 +228,7 @@ export function makeOnboardingScreen(world: World): ScreenInstance {
   }
 
   function renderReady(): void {
-    stage.replaceChildren(
+    setChildren(stage, 
       el(
         "div",
         { class: "ob__beat center" },

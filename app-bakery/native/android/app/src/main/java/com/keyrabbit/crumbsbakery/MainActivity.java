@@ -1,6 +1,7 @@
 package com.keyrabbit.crumbsbakery;
 
 import android.annotation.SuppressLint;
+import android.content.pm.ApplicationInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
@@ -56,6 +57,14 @@ public class MainActivity extends AppCompatActivity {
 
         web = new WebView(this);
         setContentView(web);
+
+        // Remote debugging via chrome://inspect, and only in a debuggable build. On a Fire tablet
+        // this is the only practical way to see a layout problem or a console error: the process
+        // stays alive and healthy when the page fails, so nothing surfaces in logcat except a
+        // single CONSOLE line that is easy to miss.
+        if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            WebView.setWebContentsDebuggingEnabled(true);
+        }
 
         final WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);

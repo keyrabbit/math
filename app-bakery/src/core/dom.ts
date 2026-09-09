@@ -58,6 +58,22 @@ export function clear(node: Element): void {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
 
+/**
+ * Replace a node's contents.
+ *
+ * This is `Element.replaceChildren` by another name, and exists because that method is Chrome 86
+ * and the WebView on a Fire tablet can be older. Calling it there throws
+ * `TypeError: replaceChildren is not a function` from inside a screen's mount, which kills
+ * navigation while leaving the app process perfectly healthy — the game rendered its title
+ * screen and then simply refused to go anywhere. Nothing in a desktop browser reproduces it.
+ *
+ * Prefer this over `replaceChildren` anywhere in the app.
+ */
+export function setChildren(node: Element, ...children: Child[]): void {
+  clear(node);
+  append(node, children);
+}
+
 /** Set `--i` on each child so the shared `.stagger` rule produces a cascade. */
 export function stagger(container: HTMLElement): HTMLElement {
   container.classList.add("stagger");

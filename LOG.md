@@ -343,3 +343,41 @@ Verified: Android builds, launches and renders correctly on an API 30 tablet emu
 renders correctly on an iPad Air 11-inch (M4) running iOS 26.5, and storage persists across
 backgrounding. Still open: no physical Fire tablet on hand for the final sideload, and an iOS
 *device* build needs an Apple team ID that does not exist yet — simulator only until it does.
+
+### The bug the screenshot could not see
+
+The paragraph above was written in good faith and was wrong in the way that matters. "Launches
+and renders correctly" was proved with a screenshot of the title screen. Both issues asked for
+something stronger — *a full lesson can be completed* — and nothing had actually tested that.
+
+So the WebView was opened up properly: `adb forward` onto its devtools socket, and a script
+(`tools/device-lesson-qa.mjs`) that plays a real recipe on the real device over the Chrome
+DevTools Protocol. The first run got exactly one screen further than the screenshot did:
+
+```
+Uncaught TypeError: a.replaceChildren is not a function
+```
+
+`Element.replaceChildren` arrived in Chrome 86. The emulator's WebView is 83. Every screen
+transition in the app used it, so **Crumb's Bakery was unplayable past its title screen** — while
+photographing perfectly. Fixed with a four-line `setChildren()` in `src/core/dom.ts`, applied at
+all nine call sites.
+
+The interesting part is *why* the earlier ES2017 fix did not cover this. `build.target` rewrites
+syntax; it does not polyfill APIs. Those are two separate compatibility surfaces and only one of
+them is a build setting. A sweep for the other one found CSS `inset` (Chrome 87, breaks overlay
+positioning — fixed with longhand), flex `gap` (84) and `aspect-ratio` (88). The last two were
+left alone: an on-device screenshot of the summary card showed spacing a little tight and
+everything else correct, which is the right trade for a browser real Fire tablets have long since
+moved past. The rule that fell out is worth keeping — **fix what breaks behaviour, accept what
+costs pixels, and decide from a device screenshot rather than a spec table.**
+
+That check is now `-Action Verify`, part of the build script rather than a one-off. It walks
+onboarding, an age band, a map node, eight facts and the summary, then reads `localStorage` back
+to confirm the progress was saved, and fails on any console error. It currently reports 8 treats
+baked, 42 facts mastered, 1 recipe completed, **0 console errors**.
+
+Generalisable, and the sharper version of the earlier lesson: *a screenshot proves a frame
+rendered, not that an app works.* The two device-only bugs in this session both left the process
+alive, responsive and photogenic. Neither was reproducible in a desktop browser. If a web app is
+being shipped natively, something has to actually play it on the device.

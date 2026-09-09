@@ -1,5 +1,5 @@
 import { audio } from "../core/audio";
-import { el, stagger } from "../core/dom";
+import { el, setChildren, stagger } from "../core/dom";
 import type { ScreenInstance, World } from "../world";
 import { FLUENT_MS } from "../game/mastery";
 import { allRecipes, opSymbol, type Operation } from "../game/curriculum";
@@ -64,7 +64,7 @@ export function makeParentsScreen(world: World): ScreenInstance {
 
   function renderGate(): void {
     scroll.dataset.mode = "gate";
-    content.replaceChildren(
+    setChildren(content, 
       el("h1", { class: "headline", textContent: "For grown-ups" }),
       el("p", { class: "dim", textContent: "Answer to continue." }),
       el("p", {
@@ -103,7 +103,7 @@ export function makeParentsScreen(world: World): ScreenInstance {
     }));
     const peak = Math.max(1, ...week.map((w) => w.minutes));
 
-    content.replaceChildren(
+    setChildren(content, 
       ...([
         el("h1", { class: "headline", textContent: "Progress" }),
         stagger(

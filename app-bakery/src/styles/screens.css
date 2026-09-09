@@ -436,7 +436,7 @@
 
 .map__trail {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   z-index: -1;
   pointer-events: none;
 }
@@ -937,7 +937,7 @@
    the world leaning in rather than as a dialog appearing. */
 .beat {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   z-index: 40;
   display: flex;
   align-items: flex-end;

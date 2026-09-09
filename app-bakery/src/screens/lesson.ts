@@ -1,5 +1,5 @@
 import { audio } from "../core/audio";
-import { el, stagger, wait } from "../core/dom";
+import { el, setChildren, stagger, wait } from "../core/dom";
 import { ticker } from "../core/ticker";
 import type { ScreenInstance, World } from "../world";
 import {
@@ -110,7 +110,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
     // ---------------------------------------------------------------- recipe card
 
     function renderLadder(): void {
-      ladder.replaceChildren();
+      setChildren(ladder);
       for (const f of solved.slice(-2)) {
         ladder.appendChild(
           el(

@@ -1,5 +1,5 @@
 import { audio } from "../core/audio";
-import { el } from "../core/dom";
+import { el, setChildren } from "../core/dom";
 import { ShelfView } from "../render/shelf";
 import { withAlpha } from "../render/stage";
 import type { ScreenInstance, World } from "../world";
@@ -31,7 +31,7 @@ export function makeCaseScreen(world: World): ScreenInstance {
 
   function showDetail(r: Recipe): void {
     const p = mastery.progress(r);
-    detail.replaceChildren(
+    setChildren(detail, 
       el("h2", { class: "case__detailTitle", textContent: r.name }),
       el("p", {
         class: "prompt",

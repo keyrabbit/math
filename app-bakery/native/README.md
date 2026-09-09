@@ -18,7 +18,7 @@ what the app is allowed to reach.
 
 ---
 
-## Two things that look like implementation detail but are not
+## Three things that look like implementation detail but are not
 
 ### 1. The bundle is never served from `file://`
 
@@ -65,6 +65,42 @@ so a genuinely ancient WebView shows a readable message instead of a brown void.
 
 **If you ever see a blank screen on a device, read `adb logcat -s chromium:*` first.** The
 process stays alive and healthy; only the console knows.
+
+### 3. Transpiling the syntax does not bring the APIs with it
+
+Pinning the build target fixed the blank screen, and the title screen then rendered
+pixel-perfect. That was misleading. `build.target` rewrites *syntax*; it does not polyfill
+*APIs*. Tapping **Open the bakery** did nothing at all, and the console said:
+
+```
+Uncaught TypeError: a.replaceChildren is not a function
+```
+
+`Element.replaceChildren` is Chrome **86**. Every screen transition used it, so the app was
+unplayable past the title on WebView 83 — while looking completely healthy in a screenshot.
+
+The fix is `setChildren()` in `src/core/dom.ts`, used at all nine former call sites. Anything
+that swaps a node's children should use it rather than `replaceChildren`.
+
+The lesson generalises: after this, the whole codebase was swept for post-83 platform features.
+
+| Feature | Needs | Effect on WebView 83 | Action |
+| --- | --- | --- | --- |
+| `??=` `||=` `&&=` | Chrome 85 | **Blank screen** — parse error | Fixed by `build.target: es2017` |
+| `Element.replaceChildren` | Chrome 86 | **Unplayable** — navigation throws | Fixed by `setChildren()` |
+| CSS `inset` shorthand | Chrome 87 | Overlays not positioned | Fixed — longhand `top/right/bottom/left` |
+| Flex/grid `gap` | Chrome 84 | Cosmetic — tighter spacing | Accepted |
+| CSS `aspect-ratio` | Chrome 88 | Cosmetic — some boxes size loosely | Accepted |
+
+The line is drawn where behaviour is: anything that breaks *function* is fixed, anything that
+costs a few pixels of spacing is not. The last two were judged from an actual device screenshot
+(`docs/shots-native/android-summary.png`) rather than from the spec tables — the summary card is
+tight but entirely correct and readable. Real Fire tablets get WebView updates through the
+Amazon Appstore and run far newer than 83; the emulator is deliberately the pessimistic case.
+
+**How this is checked now:** `-Action Verify` plays a whole recipe inside the WebView on the
+device over the Chrome DevTools Protocol and fails if any console error appears. A screenshot
+would not have caught this bug. See `tools/device-lesson-qa.mjs`.
 
 ---
 
@@ -133,6 +169,7 @@ The Gradle wrapper is checked in, so `gradle` itself is only needed to regenerat
 .\tools\Invoke-AndroidBuild.ps1 -Action Preflight   # what is installed, what is attached
 .\tools\Invoke-AndroidBuild.ps1 -Action Emulator    # start the test tablet
 .\tools\Invoke-AndroidBuild.ps1 -Action Install     # build, install, launch, screenshot, check logcat
+.\tools\Invoke-AndroidBuild.ps1 -Action Verify      # play a whole recipe inside the running app
 ```
 
 `-Action Build` stops after producing the APK at
@@ -140,6 +177,16 @@ The Gradle wrapper is checked in, so `gradle` itself is only needed to regenerat
 
 The script asserts the APK actually contains `assets/www/*`. An APK missing its payload installs
 and launches perfectly happily, and fails as a white screen on the tablet.
+
+`-Action Verify` is the one that earns its keep. It forwards the WebView's devtools socket over
+`adb`, then drives the real on-device page with `tools/device-lesson-qa.mjs`: onboarding, age
+band, a map node, eight facts, the summary card, and finally a read of `localStorage` to confirm
+progress was actually saved. It fails on any console error. Expect:
+
+```
+[7] console errors: 0
+RESULT: PASS
+```
 
 ### Sideloading onto a Fire tablet
 
@@ -227,6 +274,10 @@ else about the shell needs to change. Tracked in issue #8.
 | Builds | ✅ | ✅ |
 | Launches and renders | ✅ API 30 emulator, 2560×1800 | ✅ iPad Air 11-inch (M4), iOS 26.5 |
 | No console or runtime errors | ✅ | ✅ |
+| A whole recipe can be completed | ✅ scripted, on-device, 8 facts + summary | ⏳ rendering verified, not scripted |
 | `localStorage` survives app exit | ✅ real save data in LevelDB | ✅ key present in WebKit sqlite |
 | Hardware/system back behaves | ✅ | n/a |
 | Runs on physical hardware | ⏳ no Fire tablet on hand | ❌ needs a team ID |
+
+"Launches and renders" was true for a build that could not get past its own title screen. The
+row that matters is the third one.

@@ -94,7 +94,7 @@ canvas {
 /* The canvas world sits behind everything, edge to edge. */
 #stage {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   z-index: 0;
 }
 
@@ -102,7 +102,7 @@ canvas {
    so the world stays interactive where the UI isn't. */
 #ui {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   z-index: 1;
   display: grid;
   pointer-events: none;

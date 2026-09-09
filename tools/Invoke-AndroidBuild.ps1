@@ -11,20 +11,24 @@
     Preflight  Report toolchain and device state. Changes nothing.
     Build      Build the web bundle, then assemble the debug APK.
     Install    Build, then install and launch on the first connected device or emulator.
+    Verify     Play a whole recipe inside the running app's WebView over the devtools bridge.
     Emulator   Start the local test emulator in the background.
 
 .EXAMPLE
     .\tools\Invoke-AndroidBuild.ps1 -Action Preflight
 .EXAMPLE
     .\tools\Invoke-AndroidBuild.ps1 -Action Install
+.EXAMPLE
+    .\tools\Invoke-AndroidBuild.ps1 -Action Verify
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Preflight', 'Build', 'Install', 'Emulator')]
+    [ValidateSet('Preflight', 'Build', 'Install', 'Emulator', 'Verify')]
     [string]$Action = 'Preflight',
 
     [string]$ToolchainRoot = 'C:\UsrP\toolchain',
     [string]$AvdName = 'fire_test',
+    [int]$DevtoolsPort = 9333,
     [string]$OutDir = "$PSScriptRoot\..\app-bakery\docs\shots-native"
 )
 
@@ -149,9 +153,39 @@ function Start-Emulator {
     & $adb devices
 }
 
+function Invoke-Verify {
+    Assert-Toolchain
+
+    # The remote-debugging socket is named after the pid, and only exists in a debuggable build.
+    $line = & $adb shell ps -A 2>&1 | Select-String 'com.keyrabbit.crumbsbakery'
+    if (-not $line) { throw 'The app is not running. Use -Action Install first.' }
+    $devicePid = ($line -split '\s+')[1]
+
+    & $adb forward --remove-all | Out-Null
+    & $adb forward "tcp:$DevtoolsPort" "localabstract:webview_devtools_remote_$devicePid" | Out-Null
+    Write-Host "Attached to WebView devtools on pid $devicePid (port $DevtoolsPort)." -ForegroundColor Cyan
+
+    # `ws` is a QA-only dependency and is resolved from app-bakery/node_modules, so run there.
+    Push-Location $bakery
+    try {
+        if (-not (Test-Path 'node_modules\ws')) {
+            Write-Host 'Installing the ws client (not saved to package.json)...'
+            npm install --no-save ws | Out-Host
+        }
+        node (Join-Path $PSScriptRoot 'device-lesson-qa.mjs') "http://127.0.0.1:$DevtoolsPort" | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw 'Device lesson QA failed. See the output above.' }
+    }
+    finally {
+        Pop-Location
+        & $adb forward --remove-all | Out-Null
+    }
+    Write-Host 'A full recipe was completed on the device.' -ForegroundColor Green
+}
+
 switch ($Action) {
     'Preflight' { Invoke-Preflight }
     'Build' { Invoke-Build }
     'Install' { Invoke-Install }
     'Emulator' { Start-Emulator }
+    'Verify' { Invoke-Verify }
 }
