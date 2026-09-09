@@ -21,6 +21,7 @@ const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "sev
 export function makeParentsScreen(world: World): ScreenInstance {
   let unlocked = false;
   const content = el("div", { class: "parents__content" });
+  const scroll = el("div", { class: "parents__scroll grow", dataset: { mode: "gate" } }, content);
 
   const a = 6 + Math.floor(Math.random() * 4);
   const b = 4 + Math.floor(Math.random() * 5);
@@ -51,6 +52,7 @@ export function makeParentsScreen(world: World): ScreenInstance {
   }
 
   function renderGate(): void {
+    scroll.dataset.mode = "gate";
     content.replaceChildren(
       el("h1", { class: "headline", textContent: "For grown-ups" }),
       el("p", { class: "dim", textContent: "Answer to continue." }),
@@ -73,6 +75,7 @@ export function makeParentsScreen(world: World): ScreenInstance {
   }
 
   function renderReport(): void {
+    scroll.dataset.mode = "report";
     const s = store.mastery.summary();
     const cons = allConstellations();
     const complete = cons.filter((c) => store.mastery.progress(c).complete);
@@ -197,7 +200,7 @@ export function makeParentsScreen(world: World): ScreenInstance {
       }),
       el("div", { class: "hud__spacer" })
     ),
-    el("div", { class: "parents__scroll grow" }, content)
+    scroll
   );
 
   return {

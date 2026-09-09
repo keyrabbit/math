@@ -291,16 +291,16 @@ export function makeLessonScreen(constellation: Constellation): (world: World) =
      * constellation takes the rest. Letting them both float over the same area meant the character
      * kept landing on top of the very equation the child was reading.
      */
-    function companionWidth(): number {
-      return Math.min(96, world.stage.width * 0.22);
+    function companionWidth(rect: DOMRect): number {
+      return Math.min(110, rect.width * 0.22);
     }
 
     function skyBox(): { x: number; y: number; w: number; h: number } {
       const r = skyEl.getBoundingClientRect();
-      const left = r.left + companionWidth();
-      const avail = r.width - companionWidth();
+      const cw = companionWidth(r);
+      const avail = r.width - cw;
       const w = Math.min(avail, r.height * 2.1);
-      return { x: left + (avail - w) / 2, y: r.top, w, h: r.height };
+      return { x: r.left + cw + (avail - w) / 2, y: r.top, w, h: r.height };
     }
 
     let removeLayer: (() => void) | null = null;
@@ -331,10 +331,12 @@ export function makeLessonScreen(constellation: Constellation): (world: World) =
 
         removeTick = ticker.add(() => {
           // The character is a companion, not a co-star. It stands in its own slot at the left of
-          // the sky band, where it can react to answers without ever covering the equation.
+          // the sky band, where it can react to answers without ever covering the equation. The
+          // band is a centred column, so on a tablet it stays beside the content instead of being
+          // stranded against the screen edge.
           const r = skyEl.getBoundingClientRect();
-          const cw = companionWidth();
-          world.pipkin.setScale(Math.min(0.52, cw / 150));
+          const cw = companionWidth(r);
+          world.pipkin.setScale(Math.min(0.62, cw / 150));
           world.pipkin.moveTo(r.left + cw / 2, r.bottom - world.pipkin.bottomExtent * 0.75);
         });
       },
