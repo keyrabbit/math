@@ -158,6 +158,64 @@ export function makeLessonScreen(constellation: Constellation): (world: World) =
       return id ? constellation.facts.findIndex((f) => f.id === id) : -1;
     }
 
+    /**
+     * A one-shot story beat, shown over the live sky.
+     *
+     * The scrim is a bottom-weighted gradient rather than a flat wash so the constellation stays
+     * visible behind it — the whole point of the beat is that the child looks at the dim star while
+     * Pipkin talks about it. A flat modal would hide the very thing being explained.
+     */
+    function showBeat(lines: string[], cta: string): Promise<void> {
+      return new Promise<void>((resolve) => {
+        locked = true;
+        world.pipkin.setMood("curious");
+        audio.select();
+
+        const card = el(
+          "div",
+          { class: "beat__card" },
+          ...lines.map((t, i) =>
+            el("p", {
+              class: i === 0 ? "beat__lead" : "beat__line",
+              textContent: t,
+            }),
+          ),
+          el("button", {
+            class: "btn btn--primary beat__btn",
+            type: "button",
+            textContent: cta,
+            on: { click: () => close() },
+          }),
+        );
+        const overlay = el(
+          "div",
+          {
+            class: "beat",
+            aria: { role: "dialog", modal: "true", label: lines.join(" ") },
+          },
+          card,
+        );
+        root.appendChild(overlay);
+        // Focus the card, not the button. Programmatically focusing the button trips
+        // `:focus-visible`, so a child who tapped their way here gets a keyboard focus ring they
+        // never asked for. A container with tabindex="-1" is the standard dialog pattern: screen
+        // readers announce it and keyboard users still tab straight to the only control.
+        card.tabIndex = -1;
+        requestAnimationFrame(() => card.focus({ preventScroll: true }));
+
+        function close(): void {
+          overlay.dataset.leaving = "1";
+          audio.tap();
+          world.pipkin.setMood("delighted");
+          setTimeout(() => {
+            overlay.remove();
+            locked = false;
+            resolve();
+          }, 260);
+        }
+      });
+    }
+
     function nextQuestion(): void {
       current = mastery.nextFact(constellation, Date.now(), current?.id);
       entry = "";
@@ -168,13 +226,25 @@ export function makeLessonScreen(constellation: Constellation): (world: World) =
       world.constellation.setActiveFact(factIndexOf(current?.id));
       // A fading star is a *review*, and saying so out loud is what teaches the child that the sky
       // needs tending. Without this the dimming just looks like a bug.
-      if (current && mastery.isFading(current.id)) {
-        promptEl.textContent = "This star is fading — light it again";
-      } else {
-        promptEl.textContent = "Find the missing number";
-      }
+      const fading = !!current && mastery.isFading(current.id);
+      promptEl.textContent = fading
+        ? "This star went sleepy — wake it up"
+        : "Find the missing number";
       world.pipkin.setMood("curious");
       setTimeout(() => world.pipkin.setMood("idle"), 900);
+
+      // The very first time a star dims, stop and explain it. A child who returns to find their
+      // star darker than they left it can read that as being punished for going away; this beat
+      // reframes it as the sky needing a visit, which is also literally what spaced repetition is.
+      if (fading && store.markSeen("firstFade")) {
+        void showBeat(
+          [
+            "Look — that star went sleepy.",
+            "Stars doze off when nobody visits them. Light it again and it will stay awake much longer next time.",
+          ],
+          "Wake it up",
+        );
+      }
     }
 
     function onDigit(d: string): void {

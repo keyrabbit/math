@@ -27,6 +27,12 @@ export interface SaveData {
   settings: Settings;
   mastery: Record<string, FactState>;
   onboarded: boolean;
+  /**
+   * One-shot tutorial beats the player has already seen, keyed by name.
+   *
+   * Kept as a set rather than named booleans so a new beat costs a string, not a save migration.
+   */
+  seen: Record<string, boolean>;
 }
 
 function today(): string {
@@ -49,6 +55,7 @@ export function defaultSave(): SaveData {
     settings: { muted: false, reducedMotion: null, dailyLimitMinutes: 0 },
     mastery: {},
     onboarded: false,
+    seen: {},
   };
 }
 
@@ -107,6 +114,19 @@ class Store {
   update(patch: Partial<SaveData>): void {
     this.data = { ...this.data, ...patch };
     this.save();
+  }
+
+  /** Has this one-shot tutorial beat already played? */
+  hasSeen(key: string): boolean {
+    return this.data.seen?.[key] === true;
+  }
+
+  /** Record a one-shot tutorial beat as played. Returns false if it had already been seen. */
+  markSeen(key: string): boolean {
+    if (this.hasSeen(key)) return false;
+    this.data.seen = { ...(this.data.seen ?? {}), [key]: true };
+    this.save();
+    return true;
   }
 
   addPips(n: number): number {

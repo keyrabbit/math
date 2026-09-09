@@ -44,6 +44,20 @@ export function makeMapScreen(world: World): ScreenInstance {
   const found = constellations.findIndex((c) => !mastery.progress(c).complete);
   const nextIndex = found < 0 ? constellations.length - 1 : found;
 
+  /**
+   * The first completed constellation with fading stars, if any.
+   *
+   * Without this the whole spaced-repetition model is unreachable: `nextFact` prioritises fading
+   * facts *within* a constellation, but once a constellation is finished the trail moves on and the
+   * child never comes back, so those stars dim forever in a sky nobody visits. Surfacing the oldest
+   * fading constellation on the map — and offering it as the primary action — is what turns the
+   * decay from a decoration into an actual review schedule.
+   */
+  const tendIndex = constellations.findIndex((c) => {
+    const p = mastery.progress(c);
+    return p.complete && !p.isSealed && p.fading > 0;
+  });
+
   const pathHeight = TOP_PAD + (constellations.length - 1) * NODE_SPACING + BOTTOM_PAD;
 
   const trail = el("canvas", { class: "map__trail", aria: { hidden: "true" } });
@@ -60,14 +74,22 @@ export function makeMapScreen(world: World): ScreenInstance {
   const nodeButtons: HTMLButtonElement[] = constellations.map((c, i) => {
     const p = mastery.progress(c);
     const isNext = i === nextIndex;
-    const state = p.isSealed ? "sealed" : p.complete ? "complete" : isNext ? "next" : "open";
+    const state = p.isSealed
+      ? "sealed"
+      : p.complete && p.fading > 0
+        ? "fading"
+        : p.complete
+          ? "complete"
+          : isNext
+            ? "next"
+            : "open";
     const btn = el("button", {
       class: "mapnode",
       type: "button",
       dataset: { state },
       aria: {
         label: `${c.name}. ${c.subtitle}. ${p.lit} of ${p.total} stars lit.${
-          p.fading > 0 ? ` ${p.fading} fading.` : ""
+          p.fading > 0 ? ` ${p.fading} going sleepy — worth a visit.` : ""
         }${isNext ? " Play next." : ""}`,
       },
       on: {
@@ -89,7 +111,7 @@ export function makeMapScreen(world: World): ScreenInstance {
         el("span", { class: "mapnode__name", textContent: c.name }),
         el("span", {
           class: "mapnode__progress",
-          textContent: p.fading > 0 ? `${p.lit}/${p.total} · ${p.fading} fading` : `${p.lit}/${p.total}`,
+          textContent: p.fading > 0 ? `${p.lit}/${p.total} · ${p.fading} sleepy` : `${p.lit}/${p.total}`,
         }),
       ),
     );
@@ -99,16 +121,26 @@ export function makeMapScreen(world: World): ScreenInstance {
 
   path.appendChild(trail);
 
+  // A due review outranks new material. This is the one place the game is allowed to steer, and it
+  // steers toward the thing that actually builds fluency. The wording is an invitation to go and
+  // look after something, never a chore or a warning.
+  const tendTarget = tendIndex >= 0 ? constellations[tendIndex] : null;
+  const playTarget = tendTarget ?? constellations[nextIndex] ?? constellations[0];
+
   const buttons = el("div", { class: "map__actions row" });
   buttons.append(
     el("button", {
       class: "btn btn--primary btn--large",
       type: "button",
-      textContent: constellations[nextIndex] ? `Play ${constellations[nextIndex].name}` : "Play",
+      textContent: tendTarget
+        ? `Visit ${tendTarget.name}`
+        : playTarget
+          ? `Play ${playTarget.name}`
+          : "Play",
       on: {
         click: () => {
           audio.select();
-          void world.go(makeLessonScreen(constellations[nextIndex] ?? constellations[0]));
+          void world.go(makeLessonScreen(playTarget));
         },
       },
     }),
@@ -224,7 +256,7 @@ export function makeMapScreen(world: World): ScreenInstance {
         con,
         { x: p.x - size / 2, y: p.y - size / 2, w: size, h: size },
         mastery,
-        { time: elapsed + i, dimUnlit: 0.26 },
+        { time: elapsed + i, dimUnlit: 0.26, fit: "circle" },
       );
     });
   }

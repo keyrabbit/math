@@ -273,7 +273,7 @@ export class ConstellationView {
     c: Constellation,
     box: Box,
     mastery: Mastery,
-    opts: { pad?: number; dimUnlit?: number; time?: number } = {},
+    opts: { pad?: number; dimUnlit?: number; time?: number; fit?: "box" | "circle" } = {},
   ): void {
     const pad = (opts.pad ?? 0.12) * Math.min(box.w, box.h);
     const m = { x: box.x + pad, y: box.y + pad, w: box.w - pad * 2, h: box.h - pad * 2 };
@@ -281,7 +281,43 @@ export class ConstellationView {
     const now = Date.now();
     const time = opts.time ?? 0;
     const bright = c.facts.map((f) => mastery.brightness(f.id, now));
-    const pt = (i: number) => ({ x: m.x + (c.stars[i]?.x ?? 0.5) * m.w, y: m.y + (c.stars[i]?.y ?? 0.5) * m.h });
+
+    // Fit the actual star bounds rather than assuming they span the full 0..1 design space.
+    //
+    // Two bugs came out of not doing this. Constellations that occupy only part of their design
+    // space rendered small and off-centre; and wide ones drawn into a *circular* map node spilled
+    // past the disc, because a shape that fits a square does not fit the circle inscribed in it.
+    // `fit: "circle"` scales by the shape's bounding radius so it is always contained.
+    const cx = m.x + m.w / 2;
+    const cy = m.y + m.h / 2;
+    const xs = c.stars.map((s) => s.x);
+    const ys = c.stars.map((s) => s.y);
+    const minX = xs.length ? Math.min(...xs) : 0;
+    const maxX = xs.length ? Math.max(...xs) : 1;
+    const minY = ys.length ? Math.min(...ys) : 0;
+    const maxY = ys.length ? Math.max(...ys) : 1;
+    const midX = (minX + maxX) / 2;
+    const midY = (minY + maxY) / 2;
+    const spanX = Math.max(maxX - minX, 1e-3);
+    const spanY = Math.max(maxY - minY, 1e-3);
+
+    let k: number;
+    if (opts.fit === "circle") {
+      // Largest distance from the shape's centre, in design units.
+      let r = 1e-3;
+      for (const s of c.stars) r = Math.max(r, Math.hypot(s.x - midX, s.y - midY));
+      // 0.82 leaves room for the star glows, which extend well past the star centres. Fitting to
+      // the exact radius put the outermost glow over the disc's edge.
+      k = ((scale / 2) * 0.82) / r;
+    } else {
+      k = Math.min(m.w / spanX, m.h / spanY);
+    }
+
+    const pt = (i: number) => {
+      const s = c.stars[i];
+      if (!s) return { x: cx, y: cy };
+      return { x: cx + (s.x - midX) * k, y: cy + (s.y - midY) * k };
+    };
     const dim = opts.dimUnlit ?? 0.22;
 
     ctx.save();

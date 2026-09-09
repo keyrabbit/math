@@ -202,6 +202,7 @@
   grid-template-rows: auto auto auto 1fr auto;
   height: 100%;
   padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom));
+  position: relative;
 }
 
 /* Reserves the upper band where the constellation is drawn on canvas, so the DOM
@@ -851,3 +852,108 @@
 .parents__toggle[data-on="1"] .parents__knob {
   transform: translateX(22px);
 }
+
+/* ------------------------------------------------------------------ story beat
+   A one-shot narrative interruption drawn over the live sky.
+
+   The scrim is deliberately bottom-weighted and transparent at the top: the beat exists to make
+   the child look at something in the sky, so hiding the sky behind a flat modal would defeat it.
+   The card rises on a spring-ish curve and the scrim fades independently, so the motion reads as
+   the world leaning in rather than as a dialog appearing. */
+.beat {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: var(--sp-5);
+  padding-bottom: calc(var(--sp-6) + env(safe-area-inset-bottom));
+  background: linear-gradient(
+    180deg,
+    rgba(10, 7, 22, 0) 0%,
+    rgba(10, 7, 22, 0.28) 42%,
+    rgba(10, 7, 22, 0.82) 100%
+  );
+  animation: beat-scrim var(--dur-slow) var(--ease-out) both;
+}
+
+.beat[data-leaving="1"] {
+  animation: beat-scrim var(--dur-base) var(--ease-in) reverse both;
+}
+
+.beat__card {
+  width: min(30rem, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
+  border-radius: var(--r-xl);
+  background: rgba(28, 20, 52, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(14px);
+  animation: beat-rise 520ms var(--ease-spring) both;
+}
+
+.beat[data-leaving="1"] .beat__card {
+  animation: beat-rise var(--dur-base) var(--ease-in) reverse both;
+}
+
+.beat__lead {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-lg);
+  line-height: 1.2;
+}
+
+.beat__line {
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.beat__btn {
+  margin-top: var(--sp-2);
+  align-self: stretch;
+}
+
+@keyframes beat-scrim {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes beat-rise {
+  from { opacity: 0; transform: translateY(28px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beat__card { animation-duration: 1ms; }
+}
+
+/* A completed constellation whose stars have started to dim. It must read as "come and see me",
+   never as a warning: no red, no badge, no count. A slow breath at low amplitude reads as sleeping
+   rather than as an alert, and the dashed ring echoes the unlit sockets drawn inside the lesson
+   sky, so the visual language is consistent between the map and the constellation itself. */
+.mapnode[data-state="fading"] .mapnode__disc {
+  border-color: rgba(255, 214, 165, 0.42);
+  border-style: dashed;
+  background: radial-gradient(circle at 50% 38%, rgba(255, 196, 126, 0.2), rgba(28, 20, 52, 0.9) 70%);
+  box-shadow: 0 0 18px rgba(255, 179, 107, 0.16);
+  animation: mapnode-doze 3.6s ease-in-out infinite;
+}
+
+.mapnode[data-state="fading"] .mapnode__progress {
+  color: var(--ember-300);
+}
+
+@keyframes mapnode-doze {
+  0%, 100% { opacity: 0.72; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.035); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mapnode[data-state="fading"] .mapnode__disc { animation: none; opacity: 0.88; }
+}
+
+.beat__card:focus { outline: none; }
