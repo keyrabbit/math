@@ -237,19 +237,49 @@ Verified against macOS 26.6.2 (arm64) with Xcode 26.6.
 ### Use
 
 ```powershell
-.\tools\Invoke-MacBuild.ps1 -Action Preflight                              # connectivity, Xcode, simulators
-.\tools\Invoke-MacBuild.ps1 -Action Run                                    # build, launch, screenshot, verify storage
-.\tools\Invoke-MacBuild.ps1 -Action Run -Simulator 'iPhone 17 Pro'         # phone breakpoint
-.\tools\Invoke-MacBuild.ps1 -Action Clean                                  # remove everything from the Mac
+.\tools\Invoke-MacBuild.ps1 -Action Preflight                                    # connectivity, Xcode, simulators
+.\tools\Invoke-MacBuild.ps1 -Action Run                                          # iPhone + iPad: build, launch, verify
+.\tools\Invoke-MacBuild.ps1 -Action Run -Simulators 'iPhone SE (3rd generation)'  # the tightest layout
+.\tools\Invoke-MacBuild.ps1 -Action Clean                                        # remove everything from the Mac
 ```
 
-The screenshot lands in `app-bakery/docs/shots-native/`.
+`-Action Run` deploys to **an iPhone and an iPad by default** — the layout has to hold at both
+extremes and the cheapest way to keep that true is to prove it on every run. The app is compiled
+once: a `Debug-iphonesimulator` bundle is not device-specific, so building per simulator would
+spend minutes producing identical bytes.
+
+Screenshots land in `app-bakery/docs/shots-native/ios-<device>-title.png`.
 
 Simulators are resolved by **UDID**, not by name. Which device names exist depends on which
 runtimes are installed, so `-destination 'name=iPad Pro 11-inch (M4)'` can fail with
 "Unable to find a device matching the provided destination specifier" even when `simctl` lists
 that device. The script matches the name against `-showdestinations` and takes the newest
-runtime.
+runtime. The match is anchored on the end of the name field, or `iPhone 17` also matches
+`iPhone 17 Pro Max` and the newest-runtime pick silently lands on the wrong device.
+
+### Both waits are gates, not guesses
+
+A cold simulator needs roughly 5 seconds just to start its WebContent process, and longer when
+the Mac is still busy from the build. An early fixed sleep made the app look broken twice over
+while it was perfectly healthy:
+
+- the screenshot caught the background colour, so the iPhone appeared to render nothing;
+- the app was backgrounded before its module had run, so nothing was ever flushed and the
+  storage assertion failed.
+
+Both are now polled to a real signal:
+
+| Gate | Signal | Why it is trustworthy |
+| --- | --- | --- |
+| Rendered | screenshot PNG exceeds 300 KB | A flat brown screen is ~70 KB; the drawn title screen is 2.7–4.5 MB of gradient, skyline and starfield. The margin is enormous. |
+| Storage | `localstorage.sqlite3` exists | Only appears once the page has run and been backgrounded, so it also proves the module executed. |
+
+The run fails if either gate is not met, and finishes by bringing the app back to the foreground
+and opening Simulator — deploying to a simulator is pointless if it ends up sitting on Settings.
+
+Worth knowing when reading these results: **the app writes nothing until it is backgrounded or
+played.** A fresh install parked on the title screen legitimately has an empty `LocalStorage`
+directory, so "no save file" on its own is not evidence of a storage fault.
 
 ### Choices made in the Swift shell
 
@@ -277,10 +307,10 @@ else about the shell needs to change. Tracked in issue #8.
 | | Android | iOS |
 | --- | --- | --- |
 | Builds | ✅ | ✅ |
-| Launches and renders | ✅ API 30 emulator, 2560×1800 | ✅ iPad Air 11-inch (M4), iOS 26.5 |
+| Launches and renders | ✅ API 30 emulator, 2560×1800 | ✅ iPhone 17 and iPad Air 11-inch (M4), iOS 26.5 |
 | No console or runtime errors | ✅ | ✅ |
 | A whole recipe can be completed | ✅ scripted, on-device, 8 facts + summary | ⏳ rendering verified, not scripted |
-| `localStorage` survives app exit | ✅ real save data in LevelDB | ✅ key present in WebKit sqlite |
+| `localStorage` survives app exit | ✅ real save data in LevelDB | ✅ `localstorage.sqlite3` for both devices |
 | Hardware/system back behaves | ✅ | n/a |
 | Runs on physical hardware | ⏳ no Fire tablet on hand | ❌ needs a team ID |
 

@@ -14,13 +14,19 @@
 .PARAMETER Action
     Preflight  Check connectivity and report Xcode, simulators and toolchain state. Changes nothing.
     Build      Full round trip: build web, sync, generate, xcodebuild.
-    Run        Build, then install and launch on a simulator and collect a screenshot.
+    Run        Build, then install and launch on every -Simulator and collect a screenshot of each.
     Clean      Remove the scratch directory on the Mac.
+
+.PARAMETER Simulators
+    One or more simulator names. The app is compiled once — a Debug-iphonesimulator bundle runs on
+    any iOS simulator, phone or tablet — and then installed on each in turn.
 
 .EXAMPLE
     .\tools\Invoke-MacBuild.ps1 -Action Preflight
 .EXAMPLE
-    .\tools\Invoke-MacBuild.ps1 -Action Run -Simulator 'iPad Air 11-inch (M4)'
+    .\tools\Invoke-MacBuild.ps1 -Action Run
+.EXAMPLE
+    .\tools\Invoke-MacBuild.ps1 -Action Run -Simulators 'iPhone SE (3rd generation)'
 #>
 [CmdletBinding()]
 param(
@@ -32,8 +38,10 @@ param(
     [string]$KeyPath = "$HOME\.ssh\cheesy-mac",
     [string]$RemoteRoot = '~/CopilotWork/math-ios',
 
-    # Matched against `xcodebuild -showdestinations`; the newest matching runtime wins.
-    [string]$Simulator = 'iPad Air 11-inch (M4)',
+    # Each is matched against `xcodebuild -showdestinations`; the newest matching runtime wins.
+    # A phone and a tablet by default: the layout has to hold at both extremes, and the cheapest
+    # way to keep that true is to make the default run prove it every time.
+    [string[]]$Simulators = @('iPhone 17', 'iPad Air 11-inch (M4)'),
 
     [string]$XcodeGenVersion = '2.43.0',
     [string]$OutDir = "$PSScriptRoot\..\app-bakery\docs\shots-native"
@@ -82,8 +90,8 @@ echo "macOS:     $(sw_vers -productVersion) ($(uname -m))"
 echo "xcode:     $(xcodebuild -version 2>/dev/null | head -1)"
 echo "xcodegen:  $(~/CopilotWork/tools/xcodegen/bin/xcodegen --version 2>/dev/null || echo 'not fetched yet')"
 echo "free disk: $(df -h / | awk 'NR==2 {print $4}')"
-echo "--- iPad simulators ---"
-xcrun simctl list devices available | grep -i ipad | head -12
+echo "--- simulators ---"
+xcrun simctl list devices available | grep -E 'iPhone|iPad' | head -30
 '@ | Out-Null
 }
 
@@ -136,70 +144,125 @@ function Invoke-Build {
     Write-Host "`n=== Generating project and building ===" -ForegroundColor Cyan
     Invoke-Remote "cd $RemoteRoot && ~/CopilotWork/tools/xcodegen/bin/xcodegen generate --spec project.yml" | Out-Null
 
-    # Resolve the simulator to a UDID. Destination-by-name is fragile because the installed
+    # Resolve each simulator to a UDID. Destination-by-name is fragile because the installed
     # runtimes decide which device names exist; a UDID is unambiguous.
     $dests = Invoke-Remote "cd $RemoteRoot && xcodebuild -project CrumbsBakery.xcodeproj -scheme CrumbsBakery -showdestinations 2>/dev/null | grep 'iOS Simulator'" -Quiet
-    $match = $dests |
-        Where-Object { $_ -match [regex]::Escape($Simulator) } |
-        Select-Object -Last 1
-    if (-not $match) {
-        throw "No simulator matching '$Simulator'. Run -Action Preflight to list what is installed."
-    }
-    if ($match -notmatch 'id:([0-9A-Fa-f-]{36})') { throw "Could not parse a UDID from: $match" }
-    $udid = $Matches[1]
-    Write-Host "Simulator: $($match.Trim())" -ForegroundColor Green
 
-    Invoke-Remote "cd $RemoteRoot && xcodebuild -project CrumbsBakery.xcodeproj -scheme CrumbsBakery -configuration Debug -destination 'id=$udid' -derivedDataPath build build 2>&1 | grep -E 'error:|BUILD SUCCEEDED|BUILD FAILED' || true" | Out-Null
+    $targets = foreach ($name in $Simulators) {
+        # Anchor on the closing brace of the name field, or 'iPhone 17' also matches
+        # 'iPhone 17 Pro Max' and the newest-runtime pick silently lands on the wrong device.
+        $match = $dests |
+            Where-Object { $_ -match ('name:' + [regex]::Escape($name) + '\s*\}') } |
+            Select-Object -Last 1
+        if (-not $match) {
+            throw "No simulator matching '$name'. Run -Action Preflight to list what is installed."
+        }
+        if ($match -notmatch 'id:([0-9A-Fa-f-]{36})') { throw "Could not parse a UDID from: $match" }
+        $udid = $Matches[1]
+        $os = if ($match -match 'OS:([0-9.]+)') { $Matches[1] } else { 'unknown' }
+        $slug = ($name.ToLower() -replace '[^a-z0-9]+', '-').Trim('-')
+
+        Write-Host "Simulator: $name (iOS $os) $udid" -ForegroundColor Green
+        [pscustomobject]@{ Name = $name; Udid = $udid; Os = $os; Slug = $slug }
+    }
+
+    # One compile serves all of them: a Debug-iphonesimulator bundle is not device-specific, so
+    # building per simulator would spend minutes producing identical bytes.
+    $buildUdid = @($targets)[0].Udid
+    Invoke-Remote "cd $RemoteRoot && xcodebuild -project CrumbsBakery.xcodeproj -scheme CrumbsBakery -configuration Debug -destination 'id=$buildUdid' -derivedDataPath build build 2>&1 | grep -E 'error:|BUILD SUCCEEDED|BUILD FAILED' || true" | Out-Null
 
     $ok = Invoke-Remote "test -d $RemoteRoot/build/Build/Products/Debug-iphonesimulator/CrumbsBakery.app && echo APP_OK" -AllowFail
     if ($ok -notcontains 'APP_OK') { throw 'Build produced no .app bundle.' }
     Write-Host 'Build succeeded.' -ForegroundColor Green
 
     # Script scope rather than a return value: in PowerShell every uncaptured expression in a
-    # function body joins its output, so `return $udid` would hand the caller the npm and
+    # function body joins its output, so `return $targets` would hand the caller the npm and
     # xcodebuild chatter as well.
-    $script:SimulatorUdid = $udid
+    $script:Targets = @($targets)
 }
 
 function Invoke-Run {
     Invoke-Build | Out-Null
-    $udid = $script:SimulatorUdid
-    Write-Host "`n=== Installing and launching ===" -ForegroundColor Cyan
-    Invoke-Remote @"
+    New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+    $results = @()
+
+    foreach ($t in $script:Targets) {
+        Write-Host "`n=== $($t.Name) — installing and launching ===" -ForegroundColor Cyan
+
+        # The sequence matters, and both waits are gates rather than guesses. A cold simulator
+        # takes ~5s just to start its WebContent process, so a fixed sleep produced a screenshot
+        # of the background colour and a background-and-flush that ran before the app's module
+        # had executed — the app looked broken twice over while being perfectly healthy.
+        #
+        # Gate 1: screenshot until the frame has real content. A flat brown screen is a ~70KB PNG;
+        # the rendered title screen is 2.7-4.5MB of gradient, skyline and starfield. The margin is
+        # enormous, so a size floor is a reliable "has it drawn yet" test without needing JS.
+        # Gate 2: background the app and wait for the save file, which proves the module ran.
+        $out = Invoke-Remote @"
 set -e
-D=$udid
+D=$($t.Udid)
 APP=$RemoteRoot/build/Build/Products/Debug-iphonesimulator/CrumbsBakery.app
+SHOT=$RemoteRoot/shots/$($t.Slug).png
+mkdir -p $RemoteRoot/shots
 xcrun simctl boot `$D 2>/dev/null || true
 xcrun simctl bootstatus `$D -b
+xcrun simctl terminate `$D com.keyrabbit.crumbsbakery 2>/dev/null || true
 xcrun simctl uninstall `$D com.keyrabbit.crumbsbakery 2>/dev/null || true
 xcrun simctl install `$D `$APP
-xcrun simctl launch `$D com.keyrabbit.crumbsbakery
-sleep 8
-mkdir -p $RemoteRoot/shots
-xcrun simctl io `$D screenshot $RemoteRoot/shots/ios-launch.png
-"@ | Out-Null
-
-    New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-    $dest = Join-Path $OutDir 'ios-ipad-title.png'
-    scp @sshOpts "${remote}:$RemoteRoot/shots/ios-launch.png" $dest
-    if ($LASTEXITCODE -ne 0) { throw 'Failed to collect the screenshot.' }
-    Write-Host "Screenshot: $dest" -ForegroundColor Green
-
-    # localStorage is the entire save system, and a custom scheme rather than file:// is the only
-    # reason it works. Prove it is really on disk instead of assuming.
-    Write-Host "`n=== Verifying localStorage ===" -ForegroundColor Cyan
-    $found = Invoke-Remote @"
-D=$udid
+xcrun simctl launch `$D com.keyrabbit.crumbsbakery >/dev/null
+SZ=0
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  sleep 5
+  xcrun simctl io `$D screenshot "`$SHOT" >/dev/null 2>&1 || true
+  SZ=`$(stat -f%z "`$SHOT" 2>/dev/null || echo 0)
+  [ "`$SZ" -gt 300000 ] && break
+done
+echo "RENDERED:`$SZ"
+# Backgrounding is what fires visibilitychange, which is what flushes the save.
 xcrun simctl launch `$D com.apple.Preferences >/dev/null 2>&1 || true
-sleep 4
 C=`$(xcrun simctl get_app_container `$D com.keyrabbit.crumbsbakery data)
-grep -rl 'crumbs-bakery.save.v1' "`$C" 2>/dev/null | head -1
-"@ -AllowFail
-    if ($found -match 'LocalStorage') {
-        Write-Host 'localStorage persisted for the bakery:// origin.' -ForegroundColor Green
+HIT=''
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  sleep 5
+  HIT=`$(find "`$C" -path '*LocalStorage*' -name 'localstorage.sqlite3*' -type f | head -1)
+  [ -n "`$HIT" ] && break
+done
+echo "STORAGE:`$HIT"
+# Leave the app in the foreground; deploying to a simulator is pointless if it ends on Settings.
+xcrun simctl launch `$D com.keyrabbit.crumbsbakery >/dev/null
+"@ -Quiet
+
+        $text = $out -join "`n"
+        $rendered = $false
+        if ($text -match 'RENDERED:(\d+)') { $rendered = [int]$Matches[1] -gt 300000 }
+        if ($rendered) { Write-Host 'Rendered a real frame.' -ForegroundColor Green }
+        else { Write-Warning "$($t.Name) never drew anything but the background colour." }
+
+        $stored = [bool]($text -match 'STORAGE:\S+')
+        if ($stored) { Write-Host 'localStorage persisted for the bakery:// origin.' -ForegroundColor Green }
+        else { Write-Warning "Could not confirm localStorage on $($t.Name)." }
+
+        $dest = Join-Path $OutDir "ios-$($t.Slug)-title.png"
+        scp @sshOpts "${remote}:$RemoteRoot/shots/$($t.Slug).png" $dest
+        if ($LASTEXITCODE -ne 0) { throw "Failed to collect the screenshot for $($t.Name)." }
+        Write-Host "Screenshot: $dest" -ForegroundColor Green
+
+        $results += [pscustomobject]@{
+            Simulator  = $t.Name
+            iOS        = $t.Os
+            Rendered   = if ($rendered) { 'ok' } else { 'BLANK' }
+            Storage    = if ($stored) { 'ok' } else { 'NOT CONFIRMED' }
+            Screenshot = Split-Path $dest -Leaf
+        }
     }
-    else {
-        Write-Warning 'Could not confirm localStorage on disk. Storage may not be persisting.'
+
+    # Leave the simulators on screen: the point of deploying to them is to be able to look.
+    Invoke-Remote 'open -a Simulator' -AllowFail -Quiet | Out-Null
+
+    Write-Host "`n=== Deployed ===" -ForegroundColor Cyan
+    $results | Format-Table -AutoSize | Out-Host
+    if ($results.Storage -contains 'NOT CONFIRMED' -or $results.Rendered -contains 'BLANK') {
+        throw 'At least one simulator failed a check. See the warnings above.'
     }
 }
 
