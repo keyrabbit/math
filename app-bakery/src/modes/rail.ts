@@ -103,7 +103,12 @@ export function railMode(ctx: ModeContext): ModeInstance {
       ? `The cart hops in ${step}s. How many hops does it take to reach ${total}?`
       : `Counting in ${step}s. Which number is missing?`,
     hint: dividing
-      ? `Count the hops along the rail: ${series(step, hops)}.`
+      ? // Not a list of the multiples. The question is "how many hops", and printing
+        // 5, 10, 15, 20 puts the landing points on screen — one of which is the answer, sitting
+        // in the middle of a row of numbers a child will scan looking for exactly that. It also
+        // teaches the wrong move: the child has to count the *jumps*, and the numerals are what
+        // distracts them from doing it.
+        `Touch each stop as you go and count your touches, not the numbers you land on.`
       : `Keep adding ${step}: ${series(step, hops - 1)}, and one more hop.`,
     anchor: () => centreOf(picked) ?? centreOf(rail.querySelector(".is-blank, .is-target")),
     reveal: () => {

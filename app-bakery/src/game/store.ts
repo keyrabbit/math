@@ -22,6 +22,14 @@ export interface SaveData {
   /** Recipe keys the player has completed. */
   completed: string[];
   streakDays: number;
+  /**
+   * Longest run of correct answers ever, across every session.
+   *
+   * Kept here rather than derived from `mastery`, because a per-fact streak is a different and much
+   * smaller number: the ending read a child's best run as "2" after 481 correct answers, because
+   * the only streak being counted was how many times in a row they had got *that one fact* right.
+   */
+  bestRun: number;
   lastPlayedDay: string;
   /** Cumulative seconds played, per ISO day — feeds the parent report and the daily limit. */
   playSeconds: Record<string, number>;
@@ -49,6 +57,7 @@ export function defaultSave(): SaveData {
     unlockedChapter: 0,
     completed: [],
     streakDays: 0,
+    bestRun: 0,
     lastPlayedDay: "",
     playSeconds: {},
     settings: { muted: false, reducedMotion: null, dailyLimitMinutes: 0 },

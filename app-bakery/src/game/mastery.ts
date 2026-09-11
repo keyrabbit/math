@@ -377,20 +377,18 @@ export class Mastery {
    * answered nine hundred questions and your quickest was under a second" is a thing a
    * seven-year-old will tell somebody about, and "84% accuracy" is not.
    */
-  lifetime(): { answers: number; right: number; baked: number; fastestMs: number; bestStreak: number } {
+  lifetime(): { answers: number; right: number; baked: number; fastestMs: number } {
     let answers = 0;
     let right = 0;
     let baked = 0;
     let fastestMs = 0;
-    let bestStreak = 0;
     for (const s of this.facts.values()) {
       answers += s.seen;
       right += s.correct;
       if (s.box >= 1) baked += 1;
       if (s.bestMs > 0 && (fastestMs === 0 || s.bestMs < fastestMs)) fastestMs = s.bestMs;
-      if (s.streak > bestStreak) bestStreak = s.streak;
     }
-    return { answers, right, baked, fastestMs, bestStreak };
+    return { answers, right, baked, fastestMs };
   }
 
   /**

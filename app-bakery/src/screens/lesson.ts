@@ -718,6 +718,10 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
       if (correct) {
         streak += 1;
         bestStreak = Math.max(bestStreak, streak);
+        // A lesson's best run is also the game's best run if it beats the record. Tracked here
+        // rather than derived later, because nothing else in the save knows the order answers
+        // were given in.
+        if (streak > store.state.bestRun) store.update({ bestRun: streak });
         slotEl.dataset.status = "correct";
         modeHost.dataset.status = "correct";
         world.reward(cx, cy, streak);

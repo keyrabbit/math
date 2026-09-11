@@ -203,6 +203,7 @@ const READ = `(() => {
   const screen =
     q('.beat') ? 'beat' :
     q('.lesson') ? 'lesson' :
+    q('.finale') ? 'finale' :
     q('.summary') ? 'summary' :
     q('.map') ? 'map' :
     q('.case') ? 'case' :
@@ -774,6 +775,10 @@ let sameCount = 0;
 let lessonsPlayed = 0;
 let questionsAnswered = 0;
 let wrongAnswers = 0;
+// The driver's own record of the longest run of correct answers, so the ending's claim about it
+// can be checked against something rather than merely being present.
+let runNow = 0;
+let runBest = 0;
 let returnsLeft = PERSONA.returns;
 let lessonStart = 0;
 const lessonDurations = [];
@@ -961,6 +966,12 @@ for (let step = 0; step < 4000; step++) {
         if (played) {
           if (played.correct) questionsAnswered++;
           else wrongAnswers++;
+          if (played.correct) {
+            runNow += 1;
+            if (runNow > runBest) runBest = runNow;
+          } else {
+            runNow = 0;
+          }
           await sleep(1100);
           if (!played.correct) {
             const after = await read();
@@ -1127,6 +1138,78 @@ for (let step = 0; step < 4000; step++) {
         await sleep(1000);
       }
       break;
+
+    case "finale": {
+      // The end of the game. Reaching it at all took a seventy-five-lesson run, and the first time
+      // one did the driver had no handler and simply sat on it for twenty-five iterations — which
+      // is exactly what a child would have done if the way out had not worked.
+      note("screen", "Closing time — the end of the game");
+      await frame("finale-open");
+      await sleep(2600);
+      await frame("finale-partway");
+      // Impatient, like every child who has seen more than four seconds of anything.
+      await evaluate(
+        `document.querySelector('.finale')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`
+      );
+      await sleep(1400);
+      await frame("finale-end");
+      {
+        const f = await evaluate(`(() => {
+          const root = document.querySelector('.finale');
+          if (!root) return null;
+          const btn = root.querySelector('.finale__done');
+          const r = btn ? btn.getBoundingClientRect() : null;
+          return {
+            beats: root.querySelectorAll('.finale__beat').length,
+            shown: root.querySelectorAll('.finale__beat.is-in').length,
+            hasButton: !!btn,
+            onScreen: r ? r.top >= 0 && r.bottom <= window.innerHeight : false,
+            numbers: Array.from(root.querySelectorAll('.finale__beatValue')).map((n) => n.textContent),
+          };
+        })()`);
+        // Assertion: skipping must land the whole thing, and the way out must be visible without
+        // scrolling. A finished ending with the button below the fold is a dead end.
+        if (f && f.shown !== f.beats) {
+          note("issue", "Tapping the ending did not finish the curtain call", f);
+        }
+        if (f && !f.onScreen) {
+          note("issue", "The way out of the ending is off-screen", f);
+        }
+        // Assertion: the numbers must be the child's real ones, not zeroes or placeholders.
+        if (f && f.numbers.some((n) => !n || n === "0" || n === "NaN" || n === "undefined")) {
+          note("issue", "The ending printed an empty or placeholder number", f);
+        }
+        if (f) note("play", `Ending shows: ${f.numbers.join(" / ")}`);
+        // Assertion: the ending's best run must be a run of *answers*, not a per-fact streak. It
+        // shipped reading "2" after 481 correct answers because the only streak being counted was
+        // how many times in a row one fact had been right. The driver kept its own count, so the
+        // claim can be checked rather than merely looked at.
+        {
+          const claimed = await evaluate(`(() => {
+            const rows = Array.from(document.querySelectorAll('.finale__beat'));
+            const row = rows.find((r) => (r.textContent || '').includes('in a row'));
+            return row ? parseInt(row.querySelector('.finale__beatValue')?.textContent || '0', 10) : null;
+          })()`);
+          if (claimed !== null && runBest >= 6 && claimed < Math.floor(runBest / 2)) {
+            note("issue", "The ending under-reports the child's best run of correct answers", {
+              claimed,
+              driverSaw: runBest,
+            });
+          }
+        }
+      }
+      await tap(".finale__done");
+      await sleep(1500);
+      {
+        const after = await read();
+        if (after.screen === "finale") {
+          note("issue", "The ending's button did not lead anywhere");
+          await evaluate(`window.crumb && window.crumb.back && window.crumb.back()`);
+          await sleep(900);
+        }
+      }
+      break;
+    }
 
     default:
       note("issue", `Unrecognised screen; buttons: ${JSON.stringify(s.buttons).slice(0, 160)}`);

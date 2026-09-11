@@ -52,8 +52,8 @@ export function makeFinaleScreen(world: World): ScreenInstance {
     ...(life.fastestMs > 0
       ? [{ value: `${(life.fastestMs / 1000).toFixed(1)}s`, label: "your quickest answer ever" }]
       : []),
-    ...(life.bestStreak > 1
-      ? [{ value: String(life.bestStreak), label: "right in a row, at your best" }]
+    ...(store.state.bestRun > 1
+      ? [{ value: String(store.state.bestRun), label: "right in a row, at your best" }]
       : []),
     ...(days > 1 ? [{ value: String(days), label: "days you came back" }] : []),
     ...(seconds >= 300
