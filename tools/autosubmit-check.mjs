@@ -79,7 +79,7 @@ const state = () =>
 // screens, so pressing whatever is in front of us is enough.
 for (let i = 0; i < 40; i++) {
   const s = await state();
-  if (s.lesson && s.equation) break;
+  if (s.lesson) break;
   let acted = null;
   // The first bake is a three-tile question; tapping blindly would keep answering it wrong.
   const ob = await evaluate(`(() => {
@@ -117,9 +117,48 @@ const check = (ok, what, detail = "") => {
   if (!ok) failures.push(what);
 };
 
+/**
+ * Puts a typed question on screen.
+ *
+ * The lesson now asks its questions in seven different ways and only two of them involve a keypad,
+ * so landing on one by walking forwards is luck. This seeds a bonds recipe at the box where the
+ * keypad is in the pool and re-enters the lesson until the keypad is what comes up — re-entering
+ * rather than answering, because answering moves the box and changes the pool underneath us.
+ */
+const keypadLesson = () =>
+  evaluate(`(async () => {
+    if (document.querySelector('.lesson')?.dataset.mode === 'keypad') return 'ok';
+    const api = window.crumb;
+    if (!api) return 'no hook';
+    const curriculum = await import('/src/game/curriculum.ts');
+    const screens = await import('/src/screens/lesson.ts');
+    const recipe = curriculum.allRecipes().find((r) => r.key === 'bond:10');
+    const now = Date.now();
+    recipe.facts.forEach((f) => {
+      const st = api.store.mastery.get(f.id);
+      st.box = 3;
+      st.seen = 6;
+      st.correct = 6;
+      st.lastSeen = now - 1000;
+      st.dueAt = now - 1000;
+      st.fastest = 1200;
+    });
+    api.store.update({ onboarded: true, chapter: 0, unlockedChapter: 4 });
+    for (const key of ['firstStale', 'firstGap', 'mode:tray', 'mode:rail', 'mode:plates', 'mode:slice', 'mode:burnt', 'mode:ticket']) {
+      api.store.markSeen(key);
+    }
+    for (let i = 0; i < 40; i++) {
+      await api.world.go(screens.makeLessonScreen(recipe));
+      await new Promise((r) => setTimeout(r, 60));
+      if (document.querySelector('.lesson')?.dataset.mode === 'keypad') return 'ok';
+    }
+    return 'got ' + document.querySelector('.lesson')?.dataset.mode;
+  })()`);
+
 /** The answer to the question on screen, read the way the driver reads it. */
 async function expected() {
   const s = await state();
+  if (!s.equation) return null;
   const t = s.equation.replace(/\s+/g, " ");
   const m = t.match(/^(\d+)\s*([+\u2212\u00d7\u00f7])\s*(\d*)\s*=\s*(\d*)$/);
   if (!m) return null;
@@ -135,6 +174,8 @@ async function expected() {
 
 // --- 1. The rescue. Type the right answer, never press the tick, and the lesson must move on.
 {
+  check((await keypadLesson()) === "ok", "A typed question can be reached");
+  await sleep(900);
   const before = await state();
   const want = String(await expected());
   for (const ch of want) {
@@ -155,10 +196,13 @@ async function expected() {
 {
   let guard = 0;
   while (guard++ < 30) {
+    await keypadLesson();
+    await sleep(700);
     const want = await expected();
     if (want !== null && String(want).length === 1) break;
+    if (want === null) continue;
     // Clear this question by answering it, and look at the next one.
-    const w = String(await expected());
+    const w = String(want);
     for (const ch of w) {
       await tap(".key", ch);
       await sleep(110);
