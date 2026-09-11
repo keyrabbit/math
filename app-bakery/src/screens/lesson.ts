@@ -1,5 +1,5 @@
 import { audio } from "../core/audio";
-import { el, setChildren, stagger, wait } from "../core/dom";
+import { el, clear, setChildren, stagger, wait } from "../core/dom";
 import { ticker } from "../core/ticker";
 import type { ScreenInstance, World } from "../world";
 import {
@@ -15,6 +15,9 @@ import {
 } from "../game/curriculum";
 import { store } from "../game/store";
 import { chapterIsComplete, gameIsComplete } from "../game/progress";
+import { KEYPAD_MODES, pickMode, type ModeId } from "../game/modes";
+import { MODE_FACTORIES, type ModeInstance } from "../modes";
+import { buildStory, ticketCard } from "../modes/story";
 import { Hud } from "./hud";
 import { makeMapScreen } from "./map";
 import { makeSummaryScreen } from "./summary";
@@ -30,12 +33,82 @@ import { makeSummaryScreen } from "./summary";
  */
 const LESSON_MAX = 8;
 
+/**
+ * The range `fitMode` searches for a hands-on mode's prop size.
+ *
+ * The floor is the smallest counter a five-year-old can reliably hit with a thumb on a phone in
+ * landscape; the ceiling stops a lesson with two props in it from turning a bun into a dinner
+ * plate. Everything in `modes.css` is expressed as a multiple of the chosen value.
+ */
+const MODE_PROP_MIN = 18;
+const MODE_PROP_MAX = 128;
+/**
+ * Slack left around a fitted mode, in pixels.
+ *
+ * A search that maximises size will by definition stop at the value that *just* fits, which looks
+ * like a mistake: the three burnt cakes ran edge to edge with the last one grazing the bottom of
+ * the phone. Six pixels of enforced air costs one step of the search and reads as deliberate.
+ */
+const MODE_BREATH = 6;
+
 interface Attempt {
   fact: Fact;
   frame: FactFrame;
+  mode: ModeId;
   correct: boolean;
   ms: number;
 }
+
+/**
+ * The first time a child meets each new way of being asked, stop and introduce it.
+ *
+ * Dropping a child into a tray of buns with no explanation is the fastest way to make a new
+ * interaction feel like a malfunction. One sentence, once ever, and then never again.
+ */
+const MODE_INTROS: Partial<Record<ModeId, { lines: string[]; cta: string }>> = {
+  tray: {
+    lines: [
+      "Let's use the trays.",
+      "Tap the spaces to put buns on, or tap a bun to take it off again. Press the tick when the tray looks right.",
+    ],
+    cta: "Let me try",
+  },
+  rail: {
+    lines: [
+      "Here comes the delivery cart.",
+      "It hops along the rail in the same size step every time. Work out where it lands.",
+    ],
+    cta: "Off we go",
+  },
+  plates: {
+    lines: [
+      "Time to share things out.",
+      "Tap a plate to put one on it. Keep going until the pile is empty — and remember, every plate gets the same.",
+    ],
+    cta: "I'll share them",
+  },
+  slice: {
+    lines: [
+      "Cakes need cutting.",
+      "Tap a cake and the knife does the rest. Cut them all, then count up the slices.",
+    ],
+    cta: "Pass the knife",
+  },
+  burnt: {
+    lines: [
+      "Oh no — something got burnt.",
+      "Three cakes, and one of them has the wrong sum on it. Work them out and tap the burnt one.",
+    ],
+    cta: "I'll find it",
+  },
+  ticket: {
+    lines: [
+      "A customer left an order.",
+      "Read what they asked for, work out the number, and write it in.",
+    ],
+    cta: "Read it out",
+  },
+};
 
 /**
  * The Recipe Card — the game's core loop.
@@ -73,6 +146,13 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
     let bestStreak = 0;
     let locked = false;
     let autoSubmit: ReturnType<typeof setTimeout> | undefined;
+    /** The live hands-on mode, when this question is not a keypad one. */
+    let mode: ModeInstance | null = null;
+    let modeId: ModeId = "keypad";
+    /** What the previous question used, so `pickMode` can avoid asking the same way twice. */
+    let lastMode: ModeId | null = null;
+    /** Wrong attempts on the current question, used to soften the hint the second time. */
+    let misses = 0;
     const attempts: Attempt[] = [];
     /** Facts resolved this lesson, newest last — drives the "done" rows of the recipe card. */
     const solved: Fact[] = [];
@@ -92,7 +172,23 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
       textContent: "Find the missing number",
     });
 
+    /**
+     * The "gone stale" note, as its own badge rather than a suffix on the prompt.
+     *
+     * It used to be appended in brackets, which was fine for "Find the missing number" and absurd
+     * for a mode prompt that is already two sentences: "One of these came out wrong. Which one?
+     * (this one's gone stale)". Separating them also means the note keeps its meaning — it is about
+     * the fact's history, not about this question.
+     */
+    const staleTag = el("p", { class: "lesson__stale", textContent: "Gone stale — bake it fresh" });
+    staleTag.hidden = true;
+
     const skyEl = el("div", { class: "lesson__shelf" });
+
+    /** Where a hands-on mode mounts. Empty, and `hidden`, on keypad questions. */
+    const modeHost = el("div", { class: "lesson__mode" });
+    /** Where the order ticket pins itself, above the equation. */
+    const ticketHost = el("div", { class: "lesson__ticket" });
 
     const titleEl = el(
       "div",
@@ -123,14 +219,16 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
       );
     }
 
+    const inputBar = el("div", { class: "lesson__input" }, stagger(keypad));
+
     const root = el(
       "div",
-      { class: "lesson" },
+      { class: "lesson", dataset: { mode: "keypad" } },
       hud.element,
       skyEl,
       titleEl,
-      el("div", { class: "lesson__body" }, promptEl, ladder),
-      el("div", { class: "lesson__input" }, stagger(keypad))
+      el("div", { class: "lesson__body" }, ticketHost, promptEl, staleTag, ladder, modeHost),
+      inputBar
     );
 
     // ---------------------------------------------------------------- recipe card
@@ -273,6 +371,101 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
       });
     }
 
+    /**
+     * Grow a hands-on mode to fill the band it was given.
+     *
+     * Hiding the keypad frees about a third of the screen, and the first screenshots showed the
+     * result: a single cake, correctly drawn, marooned in the middle of an enormous empty room.
+     * It read as a bug. Rather than hand-tuning a prop size per mode per breakpoint — six modes
+     * times four breakpoints, all of them wrong the moment a recipe has a different number of
+     * things in it — the mode is measured at its natural size and scaled up to fit, with the same
+     * one-pass technique that fits the equation.
+     *
+     * Only ever upward, and never past 1.7. Scaling down would shrink tap targets below the size a
+     * five-year-old can hit, and the modes are already built to fit at 1.
+     */
+    /**
+     * Grow a hands-on mode until it fills the band it was given.
+     *
+     * Hiding the keypad frees about a third of the screen, and the first screenshots showed the
+     * result: a single cake, correctly drawn, marooned in the middle of an enormous empty room. It
+     * read as a bug rather than as a question.
+     *
+     * The obvious fix — scale the whole mode with a transform — does not work, because a mode is a
+     * full-width flex column, so the horizontal ratio is always exactly 1 and clamps everything.
+     * What actually wants to grow is the props, and every mode already sizes its props from one
+     * custom property. So this searches for the largest `--prop` that still fits in both axes and
+     * stops there.
+     *
+     * A search rather than arithmetic because a mode's height is not linear in `--prop`: labels,
+     * gaps and wrapped rows all have fixed parts, and a tray of ten wraps to two rows at exactly
+     * one point. Ten layout reads once per question is not worth being clever about.
+     */
+    /**
+     * Size every prop in the mounted mode so the whole thing fits the room it was given.
+     *
+     * A search rather than arithmetic, because height is not a linear function of `--prop`: labels
+     * wrap, rows break and gaps collapse at thresholds. Stepping down from the largest and taking
+     * the first value that fits is both simpler and more correct than any formula.
+     *
+     * The horizontal test walks the descendants rather than reading `scrollWidth`. A centred
+     * `nowrap` row that is too wide spills equally off *both* edges, and `scrollWidth` counts only
+     * the right-hand side — so the rail could hang 11px off each edge of a phone while the element
+     * cheerfully reported that it fitted.
+     */
+    function fitMode(): void {
+      if (!mode) return;
+      const node = mode.element;
+      const roomH = modeHost.clientHeight;
+      const roomW = modeHost.clientWidth;
+      if (roomH <= 0 || roomW <= 0) return;
+
+      /**
+       * True when the mode's content spills outside the room, measured in *unscaled* pixels.
+       *
+       * The scale correction is not paranoia. `.mode` enters with `animation: modeIn` which starts
+       * at `scale(0.97)`, and `fitMode` runs the instant the mode is mounted — mid-animation. Every
+       * rect therefore read 3% narrow, which was enough for a 508px rail to pass as fitting a 492px
+       * landscape column and then settle 8px off each edge. Dividing the measured extent by the
+       * live scale (`offsetWidth` is immune to transforms, `getBoundingClientRect` is not) makes
+       * the test independent of whatever the entry animation is doing at that moment.
+       */
+      const tooWide = (): boolean => {
+        const nodeRect = node.getBoundingClientRect();
+        if (nodeRect.width <= 0) return false;
+        const scale = node.offsetWidth / nodeRect.width;
+        let left = 0;
+        let right = node.offsetWidth;
+        for (const child of node.querySelectorAll<HTMLElement>("*")) {
+          const r = child.getBoundingClientRect();
+          if (r.width <= 0) continue;
+          left = Math.min(left, (r.left - nodeRect.left) * scale);
+          right = Math.max(right, (r.right - nodeRect.left) * scale);
+        }
+        return right - left > roomW - MODE_BREATH;
+      };
+
+      const base = MODE_PROP_MIN;
+      let best = base;
+      for (let prop = MODE_PROP_MAX; prop > base; prop -= 4) {
+        modeHost.style.setProperty("--prop", `${prop}px`);
+        if (node.offsetHeight <= roomH - MODE_BREATH && !tooWide()) {
+          best = prop;
+          break;
+        }
+      }
+      modeHost.style.setProperty("--prop", `${best}px`);
+    }
+
+    /** Tear down whatever the last question put on screen. */
+    function clearMode(): void {
+      mode?.destroy?.();
+      mode = null;
+      clear(modeHost);
+      clear(ticketHost);
+      delete modeHost.dataset.status;
+    }
+
     function nextQuestion(): void {
       clearTimeout(autoSubmit);
       const fact = mastery.nextFact(recipe, Date.now(), askedThisLesson);
@@ -282,27 +475,78 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
       }
       askedThisLesson.add(fact.id);
 
+      const state = mastery.get(fact.id);
+      const choice = pickMode(fact, recipe, state, { last: lastMode });
+      modeId = choice.mode;
+      lastMode = modeId;
+
       // A fact the child has already baked can be asked the harder way. New material never is:
       // nothing should be introduced in its most demanding form.
-      const state = mastery.get(fact.id);
-      const canGap = state.box >= 2 && fact.b !== fact.answer;
+      const canGap = choice.allowGap && fact.b !== fact.answer;
       const frame: FactFrame = canGap && (state.seen + fact.a) % 2 === 0 ? "gap" : "direct";
       current = askFact(fact, frame);
 
       entry = "";
+      misses = 0;
       locked = false;
+      clearMode();
       questionStart = performance.now();
-      renderLadder();
-      updateSlot();
-      world.shelf.setActiveFact(factIndexOf(fact.id));
-      // A stale treat is a *review*, and saying so out loud is what teaches the child that the case
-      // needs restocking. Without this the dulling just looks like a bug.
+
       const stale = mastery.isStale(fact.id);
-      promptEl.textContent = stale
-        ? "This one's gone stale — bake it fresh"
-        : frame === "gap"
-          ? "How many more?"
-          : "Find the missing number";
+      const usesKeypad = KEYPAD_MODES.has(modeId);
+      root.dataset.mode = modeId;
+      root.dataset.stale = stale ? "1" : "0";
+      staleTag.hidden = !stale;
+      inputBar.hidden = !usesKeypad;
+      ladder.hidden = !usesKeypad;
+      modeHost.hidden = usesKeypad;
+
+      if (usesKeypad) {
+        renderLadder();
+        updateSlot();
+        if (modeId === "ticket") {
+          // The story rotates with the number of times this fact has been seen, so a child who
+          // meets `6 × 4` five times does not get Mrs Pemberly and her boxes five times.
+          const story = buildStory(fact, recipe, state.seen);
+          setChildren(ticketHost, ticketCard(story));
+          promptEl.textContent = story.question;
+          root.setAttribute("aria-label", story.spoken);
+        } else {
+          promptEl.textContent = frame === "gap" ? "How many more?" : "Find the missing number";
+        }
+      } else {
+        const factory = MODE_FACTORIES[modeId];
+        // If a mode ever fails to build we must still ask the question, so the keypad is the
+        // fallback for everything. A missing manipulative is a disappointment; a stuck lesson is
+        // a child who never comes back.
+        if (factory) {
+          mode = factory({
+            asked: current,
+            recipe,
+            commit: (correct, said) => void resolve(correct, said),
+            isLocked: () => locked,
+            reducedMotion: world.reducedMotion,
+          });
+        }
+        if (mode) {
+          setChildren(modeHost, mode.element);
+          promptEl.textContent = mode.prompt;
+          modeHost.setAttribute("aria-label", mode.spoken);
+          // After layout, not during it: the mode has just been inserted and has no box yet.
+          requestAnimationFrame(fitMode);
+        } else {
+          modeId = "keypad";
+          root.dataset.mode = "keypad";
+          inputBar.hidden = false;
+          ladder.hidden = false;
+          modeHost.hidden = true;
+          renderLadder();
+          updateSlot();
+          promptEl.textContent = "Find the missing number";
+        }
+      }
+
+      world.shelf.setActiveFact(factIndexOf(fact.id));
       world.crumb.setMood("curious");
       setTimeout(() => world.crumb.setMood("idle"), 900);
 
@@ -318,6 +562,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
           ],
           "Bake it fresh"
         );
+        return;
       }
       // The first gap question is a new *kind* of question, not a new fact. Say so once.
       if (frame === "gap" && store.markSeen("firstGap")) {
@@ -328,11 +573,17 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
           ],
           "I can do that"
         );
+        return;
+      }
+      // …and the same courtesy for each new way of being asked.
+      const intro = MODE_INTROS[modeId];
+      if (intro && store.markSeen(`mode:${modeId}`)) {
+        void showBeat(intro.lines, intro.cta);
       }
     }
 
     function onDigit(d: string): void {
-      if (locked || entry.length >= 3) return;
+      if (locked || entry.length >= 3 || !KEYPAD_MODES.has(modeId)) return;
       entry += d;
       audio.key(entry.length - 1);
       updateSlot();
@@ -356,7 +607,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
      */
     function armAutoSubmit(): void {
       clearTimeout(autoSubmit);
-      if (!current || entry === "") return;
+      if (!current || entry === "" || !KEYPAD_MODES.has(modeId)) return;
       // Three digits is the cap: it cannot grow, so there is nothing to wait for.
       if (entry.length >= 3) {
         autoSubmit = setTimeout(() => void onSubmit(), 180);
@@ -367,7 +618,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
     }
 
     function onDelete(): void {
-      if (locked || entry.length === 0) return;
+      if (locked || entry.length === 0 || !KEYPAD_MODES.has(modeId)) return;
       entry = entry.slice(0, -1);
       audio.tap();
       updateSlot();
@@ -376,26 +627,43 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
 
     async function onSubmit(): Promise<void> {
       clearTimeout(autoSubmit);
-      if (locked || !current || entry === "") return;
+      if (locked || !current || entry === "" || !KEYPAD_MODES.has(modeId)) return;
+      await resolve(Number(entry) === current.expected, entry);
+    }
+
+    /**
+     * Score an answer, whichever way it arrived.
+     *
+     * Every mode funnels through here, and that is the whole reason six interactions were
+     * affordable. The reward, the sprinkles, the mastery record, the shelf, the progress bar and
+     * the decision to end the lesson are all identical no matter whether the child typed a number,
+     * loaded a tray or spotted a burnt cake — which matters more than it sounds, because a child
+     * who notices that one kind of question pays better will simply stop doing the others.
+     */
+    async function resolve(correct: boolean, said: string): Promise<void> {
+      clearTimeout(autoSubmit);
+      if (locked || !current) return;
       locked = true;
       const asked = current;
       const fact = asked.fact;
-      const correct = Number(entry) === asked.expected;
       const ms = performance.now() - questionStart;
       const index = factIndexOf(fact.id);
       const wasBaked = mastery.isBaked(fact.id);
 
       mastery.record(fact.id, correct, ms);
-      attempts.push({ fact, frame: asked.frame, correct, ms });
+      attempts.push({ fact, frame: asked.frame, mode: modeId, correct, ms });
 
-      const rect = slotEl.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
+      // Burst from wherever the answer actually happened — the slot, the bun they tapped, the cake
+      // they picked. A sparkle that always starts in the same place stops feeling caused.
+      const spot = mode?.anchor?.() ?? centreOfSlot();
+      const cx = spot.x;
+      const cy = spot.y;
 
       if (correct) {
         streak += 1;
         bestStreak = Math.max(bestStreak, streak);
         slotEl.dataset.status = "correct";
+        modeHost.dataset.status = "correct";
         world.reward(cx, cy, streak);
         store.addSprinkles(1 + Math.min(streak, 5));
         hud.setSprinkles(store.state.sprinkles);
@@ -424,6 +692,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
 
         await wait(world.reducedMotion ? 200 : 620);
         delete slotEl.dataset.status;
+        delete modeHost.dataset.status;
 
         if (answered >= lessonLength) {
           void finish();
@@ -431,18 +700,46 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
         }
         nextQuestion();
       } else {
+        misses += 1;
         streak = 0;
         slotEl.dataset.status = "retry";
+        modeHost.dataset.status = "retry";
         world.softMiss();
         // A hint, never a correction. The reference app was repeatedly criticised in reviews for
-        // harsh wrong-answer copy; here a miss buys you a strategy you can act on.
-        promptEl.textContent = askedHint(asked);
+        // harsh wrong-answer copy; here a miss buys you a strategy you can act on. A mode's own
+        // hint is about the thing in front of the child — "give one to every plate, then go round
+        // again" — so it wins over the generic strategy line whenever there is one.
+        promptEl.textContent =
+          misses >= 2 ? secondHint(asked, said) : (mode?.hint ?? askedHint(asked));
         await wait(world.reducedMotion ? 260 : 620);
         delete slotEl.dataset.status;
+        delete modeHost.dataset.status;
         entry = "";
-        updateSlot();
+        if (mode) mode.retry?.();
+        else updateSlot();
         locked = false;
       }
+    }
+
+    /**
+     * The second hint on the same question.
+     *
+     * Repeating the first hint verbatim tells a child that the game has nothing more to offer,
+     * which is the moment they hand the tablet to an adult. The second time we say something about
+     * *their* answer rather than about the method: near misses get named as near misses, which is
+     * both true and the most encouraging thing available.
+     */
+    function secondHint(asked: AskedFact, said: string): string {
+      const n = Number(said);
+      if (Number.isFinite(n) && Math.abs(n - asked.expected) === 1) return "So close — just one out.";
+      if (Number.isFinite(n) && n > asked.expected) return "That's a bit too many. Try a smaller one.";
+      if (Number.isFinite(n) && n > 0) return "That's a bit too few. Try a bigger one.";
+      return askedHint(asked);
+    }
+
+    function centreOfSlot(): { x: number; y: number } {
+      const rect = (mode ? modeHost : slotEl).getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     }
 
     async function finish(): Promise<void> {
@@ -518,8 +815,12 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
         window.addEventListener("keydown", onKeyDown);
         // Rotating the device, or the display font arriving late, both change how much the
         // equation needs. Re-measure rather than trusting the width we had at first paint.
-        fitObserver = new ResizeObserver(() => fitLadder());
+        fitObserver = new ResizeObserver(() => {
+          fitLadder();
+          fitMode();
+        });
         fitObserver.observe(ladder);
+        fitObserver.observe(modeHost);
         void document.fonts?.ready.then(() => fitLadder());
 
         removeLayer = world.stage.add((c) => {
@@ -541,6 +842,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
       destroy() {
         window.removeEventListener("keydown", onKeyDown);
         clearTimeout(autoSubmit);
+        clearMode();
         fitObserver?.disconnect();
         removeLayer?.();
         removeTick?.();

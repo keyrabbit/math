@@ -1,0 +1,923 @@
+/* ============================================================================
+   QUESTION MODES
+   ============================================================================
+   Six ways of asking, sharing one visual grammar.
+
+   The rule every mode obeys: the thing the child touches is a warm, raised,
+   physical object with a rim of light on top, and it moves when touched. That
+   is the same rule the keypad follows, which is why a tray of buns and a
+   number pad read as parts of one game rather than two screens someone
+   bolted together.
+
+   Sizing is the hard part, not looks. A mode has to fit the same band the
+   equation used to occupy — between the shelf and the bottom of the screen —
+   on a 320px phone in landscape and on a 13" iPad. So every mode lays out on
+   a grid or a wrap, every prop is sized from a single `--prop` custom
+   property, and that property shrinks with the viewport. Nothing is positioned
+   absolutely and nothing assumes a minimum width.
+   ========================================================================= */
+
+.lesson__mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  width: 100%;
+  /* Takes every pixel the keypad is not using, so `fitMode` has a real box to
+     measure against rather than the mode's own content height. */
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-inline: var(--sp-3);
+  /* The prop size for every mode. One knob, turned by the media queries at the
+     bottom of this file, so a mode can never disagree with its neighbours
+     about how big a bun is. Hands-on questions hide the keypad, which frees
+     roughly a third of the screen — the props grow into it rather than leaving
+     a manipulative marooned in the middle of an empty room. */
+  --prop: 48px;
+}
+
+.lesson__mode[hidden] {
+  display: none;
+}
+
+.mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  /* Set by `fitMode` once the mode is in the document: an inline `--prop`
+     chosen to fill whatever the keypad left behind. Everything below is a
+     multiple of it, so one number sizes the whole mode. */
+  transform-origin: center center;
+  animation: modeIn var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes modeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+}
+
+/* A correct answer washes the whole stage warm for a beat, the same way the
+   answer slot does on the keypad path. Without it, getting a tray right felt
+   quieter than typing the same number, and children notice that immediately. */
+.lesson__mode[data-status="correct"] .mode {
+  animation: modePop var(--dur-base) var(--ease-spring) both;
+}
+
+.lesson__mode[data-status="retry"] .mode {
+  animation: modeShake 400ms var(--ease-out) both;
+}
+
+@keyframes modePop {
+  50% {
+    transform: scale(1.035);
+  }
+}
+
+@keyframes modeShake {
+  20% {
+    transform: translateX(-7px);
+  }
+  45% {
+    transform: translateX(6px);
+  }
+  70% {
+    transform: translateX(-3px);
+  }
+}
+
+/* ---------------------------------------------------------------- answer chips */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2);
+}
+
+.chips[hidden] {
+  display: none;
+}
+
+.chip {
+  /* Sized from the prop knob, never from `em`. An `em`-based `min-width` looks
+     fine until `fitMode` raises the font, at which point three chips demand
+     550px on a 320px phone and shove themselves off both edges — which is
+     exactly what the first small-screen capture showed. */
+  min-width: calc(var(--prop) * 1.35);
+  max-width: 100%;
+  min-height: max(52px, calc(var(--prop) * 0.95));
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--surface-line);
+  border-radius: var(--r-md);
+  background: linear-gradient(180deg, rgba(255, 236, 210, 0.16), rgba(255, 236, 210, 0.06));
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 246, 232, 0.2);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(1.3rem, calc(var(--prop) * 0.5), 2.8rem);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    background var(--dur-fast) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out);
+}
+
+.chip:active {
+  transform: scale(0.94);
+}
+
+.chip:disabled {
+  cursor: default;
+}
+
+/* A chip the child already tried stays on screen, greyed. Removing it would
+   quietly change the answer count mid-question, and leaving it lets them see
+   what they have ruled out — which is the skill. */
+.chip--wrong {
+  opacity: 0.34;
+  background: rgba(255, 236, 210, 0.04);
+  text-decoration: line-through;
+}
+
+/* ---------------------------------------------------------------- ready button */
+
+.modeReady {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 54px;
+  padding: var(--sp-2) var(--sp-5);
+  border: none;
+  border-radius: var(--r-pill);
+  background: linear-gradient(180deg, var(--ember-400), var(--ember-600));
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 246, 232, 0.45);
+  color: var(--ink-900);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-md);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.modeReady:active {
+  transform: scale(0.95);
+}
+
+.modeReady__tick {
+  font-size: 1.2em;
+}
+
+/* ---------------------------------------------------------------- the tray */
+
+.tray__board {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+/* The tray itself: a baking sheet, so it needs a lip and a warm metal face
+   rather than a card. */
+.tray__slots {
+  display: grid;
+  /* Up to five across, then it wraps to a second row — which is exactly how a
+     child lays out counters, and it makes ten read as two fives. */
+  grid-template-columns: repeat(auto-fit, minmax(var(--prop), calc(var(--prop) + 8px)));
+  grid-auto-rows: calc(var(--prop) + 8px);
+  justify-content: center;
+  gap: 4px;
+  max-width: min(calc(var(--prop) * 5 + 60px), 100%);
+  padding: var(--sp-2);
+  border-radius: var(--r-md);
+  background: linear-gradient(180deg, rgba(90, 60, 40, 0.9), rgba(58, 36, 22, 0.95));
+  box-shadow:
+    inset 0 2px 0 rgba(255, 236, 210, 0.16),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.5),
+    var(--shadow-md);
+}
+
+.tray__slot {
+  display: grid;
+  place-items: center;
+  min-width: var(--prop);
+  min-height: var(--prop);
+  padding: 0;
+  border: 1.5px dashed rgba(255, 236, 210, 0.22);
+  border-radius: var(--r-sm);
+  background: rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.tray__slot.is-full {
+  border-color: transparent;
+  border-style: solid;
+  background: transparent;
+  animation: trayDrop var(--dur-base) var(--ease-spring) both;
+}
+
+/* The buns that came with the question are part of the sum, not part of the
+   answer. They sit slightly sunk and unlit so the child can see at a glance
+   which ones are theirs. */
+.tray__slot.is-locked {
+  cursor: default;
+  filter: saturate(0.8) brightness(0.86);
+}
+
+.tray__slot:not(:disabled):active {
+  transform: scale(0.9);
+}
+
+@keyframes trayDrop {
+  from {
+    transform: translateY(-14px) scale(0.6);
+    opacity: 0;
+  }
+}
+
+/* Props are drawn at a generous backing resolution and then sized here, so a
+   bun on a 62px tablet tray and a bun in a 34px plate stack come off the same
+   code path and both stay crisp on a 3× screen. */
+.tray__slot .prop__treat {
+  width: 86%;
+  height: 86%;
+}
+
+.plates__pile .prop__treat,
+.plates__stack .prop__treat {
+  width: calc(var(--prop) * 0.72);
+  height: calc(var(--prop) * 0.72);
+}
+
+.tray__readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 4.5em;
+}
+
+.tray__readoutLabel {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.tray__count {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-2xl);
+  line-height: 1;
+  color: var(--sugar-300);
+  text-shadow: var(--glow-sugar);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- the rail */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.rail__track {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(4px, 1.5vw, 12px);
+  width: 100%;
+  padding: var(--sp-4) var(--sp-2) var(--sp-3);
+  border: 1px solid rgba(255, 236, 210, 0.16);
+  border-radius: var(--r-lg);
+  /* The rail: a single bright line the stops stand on, over a dark plank.
+     The plank is not decoration — without it the numbers sat straight on the
+     painted skyline and the whole mode read as text floating over artwork.
+     Deliberately *not* scrollable: if the stops do not fit, `fitMode` must see
+     the overflow and shrink them. A scroll bar would hide the problem and hand
+     a five-year-old a horizontal swipe they will never discover. */
+  background:
+    linear-gradient(180deg, transparent calc(100% - 18px), rgba(255, 236, 210, 0.34) calc(100% - 18px), rgba(255, 236, 210, 0.34) calc(100% - 15px), transparent calc(100% - 15px)),
+    linear-gradient(180deg, rgba(18, 10, 7, 0.72), rgba(18, 10, 7, 0.5));
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 246, 232, 0.12);
+}
+
+/* Stops the cart has not reached yet. The peg is still there — the rail keeps
+   going — but the number is not, so "what comes next" has to be counted. */
+.rail__stop.is-ahead .rail__value {
+  color: var(--text-faint);
+  opacity: 0.5;
+}
+
+.rail__stop.is-ahead .rail__peg {
+  opacity: 0.45;
+}
+
+.rail__stop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  min-width: calc(var(--prop) * 1.15);
+}
+
+.rail__hop {
+  font-size: clamp(0.6rem, calc(var(--prop) * 0.28), 1.1rem);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.rail__value {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(0.95rem, calc(var(--prop) * 0.56), 3rem);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.rail__peg {
+  width: clamp(6px, calc(var(--prop) * 0.2), 22px);
+  height: clamp(6px, calc(var(--prop) * 0.2), 22px);
+  margin-top: 4px;
+  border-radius: 50%;
+  background: rgba(255, 236, 210, 0.4);
+}
+
+.rail__stop.is-blank .rail__value {
+  /* A question mark is a smaller glyph than a two-digit number at the same
+     font-size, and next to `5` and `10` it read as an afterthought rather
+     than as the thing being asked. */
+  font-size: clamp(1.15rem, calc(var(--prop) * 0.74), 3.6rem);
+  color: var(--ember-400);
+  text-shadow: var(--glow-accent);
+  animation: railPulse 1.8s var(--ease-in-out) infinite;
+}
+
+.rail__stop.is-blank .rail__peg,
+.rail__stop.is-target .rail__peg {
+  background: var(--ember-400);
+  box-shadow: var(--glow-accent);
+}
+
+.rail__stop.is-target .rail__value {
+  color: var(--ember-300);
+}
+
+@keyframes railPulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ---------------------------------------------------------------- plates */
+
+.plates__board {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.plates__pileBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.plates__pileLabel {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.plates__pile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  max-width: calc(var(--prop) * 3.2);
+  min-height: var(--prop);
+  padding: var(--sp-2);
+  border-radius: var(--r-md);
+  background: rgba(0, 0, 0, 0.22);
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+.plates__pile[data-remaining="0"] {
+  opacity: 0.4;
+}
+
+.plates__pileCount {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-lg);
+  color: var(--sugar-300);
+}
+
+.plates__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
+  gap: var(--sp-2);
+}
+
+.plates__plate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: calc(var(--prop) * 1.7);
+  min-height: calc(var(--prop) * 1.5);
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.plates__plate:not(:disabled):active {
+  transform: scale(0.93) translateY(2px);
+}
+
+/* Treats stack up the plate with a heavy negative margin, so a plate of four
+   reads as a little pile rather than a column — and so six still fits in the
+   same box four did. */
+.plates__stack {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  margin-bottom: -6px;
+}
+
+.plates__stack > * {
+  margin-top: calc(var(--prop) * -0.42);
+}
+
+.plates__stack > *:first-child {
+  margin-top: 0;
+}
+
+/* The plate: an ellipse seen nearly edge-on, which is how a plate looks on a
+   counter and how it has to look to stack things on. The inset rim matters —
+   without it the plates photographed as flat white blobs with no read as
+   crockery at all. */
+.plates__disc {
+  width: calc(var(--prop) * 1.7);
+  height: calc(var(--prop) * 0.48);
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper-dim) 55%, #b89a7d 100%);
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.55),
+    inset 0 0 0 3px rgba(150, 120, 96, 0.35);
+}
+
+/* A plate that is holding something sits a touch brighter, so "dealt" and
+   "empty" are distinguishable at a glance and not only by counting. */
+.plates__plate[data-count="0"] .plates__disc {
+  filter: brightness(0.82) saturate(0.85);
+}
+
+.plates__question {
+  min-height: 1.4em;
+  text-align: center;
+  font-size: var(--text-md);
+  color: var(--text-dim);
+}
+
+.plates__question.is-nudge {
+  color: var(--ember-300);
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- slicing */
+
+.slice__board {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.slice__cake {
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  line-height: 0;
+  cursor: pointer;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.45));
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    filter var(--dur-base) var(--ease-out);
+}
+
+/* Drawn once at a generous backing size and displayed from `--prop`, so a
+   board of one cake and a board of four come off the same canvas. */
+.slice__art {
+  width: calc(var(--prop) * 1.75);
+  height: calc(var(--prop) * 1.75);
+}
+
+.slice__cake:not(:disabled):active {
+  transform: scale(0.93);
+}
+
+.slice__cake.is-cut {
+  animation: sliceCut 420ms var(--ease-spring) both;
+}
+
+/* The knife lands, the cake jumps, the wedges settle. Short, because it plays
+   up to four times in a row and a long flourish becomes a wait. */
+@keyframes sliceCut {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.14) rotate(-3deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+.slice__tally {
+  min-height: 1.3em;
+  font-size: var(--text-sm);
+  color: var(--sugar-300);
+}
+
+.slice__question {
+  min-height: 1.4em;
+  font-size: var(--text-md);
+  color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------- burnt */
+
+.burnt__tray {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  width: 100%;
+}
+
+.burnt__cake {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: calc(var(--prop) * 3.4);
+  /* Short slabs. At 1.9 the three cakes filled a phone top to bottom with vast
+     blank icing around one line of text, and the last one grazed the screen
+     edge. A cake only has to be big enough to tap and read. */
+  min-height: calc(var(--prop) * 1.05);
+  max-height: calc(var(--prop) * 1.6);
+  padding: var(--sp-3) var(--sp-3);
+  border: none;
+  border-radius: var(--r-md);
+  /* A sponge slab with icing on top: two stacked gradients rather than two
+     elements, so the whole card can be tinted in one go when it burns. */
+  background:
+    linear-gradient(180deg, #f7e6c6 0 46%, #e0c093 46% 60%, #c79a67 60% 100%);
+  box-shadow: var(--shadow-md), inset 0 2px 0 rgba(255, 255, 255, 0.5);
+  color: var(--ink-800);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(0.9rem, calc(var(--prop) * 0.42), 2.2rem);
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    filter var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out);
+}
+
+.burnt__cake:not(:disabled):active {
+  transform: scale(0.95);
+}
+
+.burnt__glaze {
+  position: absolute;
+  inset: 6px 8px auto;
+  height: 34%;
+  border-radius: var(--r-sm) var(--r-sm) 40% 40%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+.burnt__sum {
+  position: relative;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Found it. The cake chars, which is both the answer and the joke. */
+.burnt__cake.is-burnt {
+  background: linear-gradient(180deg, #4a3222 0 46%, #34211408 46%, #241309 100%);
+  color: var(--sugar-300);
+  animation: burntPuff 520ms var(--ease-out) both;
+}
+
+.burnt__cake.is-fine {
+  opacity: 0.42;
+  filter: saturate(0.6);
+  cursor: default;
+}
+
+@keyframes burntPuff {
+  30% {
+    transform: translateY(-6px) rotate(-2deg);
+  }
+}
+
+/* ---------------------------------------------------------------- order ticket */
+
+.lesson__ticket:empty {
+  display: none;
+}
+
+.ticket {
+  position: relative;
+  max-width: 30ch;
+  margin-bottom: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4) var(--sp-3);
+  border-radius: 4px;
+  /* Docket paper, pinned to the rail above the counter. The tiny rotation is
+     what stops it reading as a dialog box. */
+  background: linear-gradient(180deg, #fffaf0, #f2e2c8);
+  box-shadow: var(--shadow-md);
+  color: var(--ink-700);
+  transform: rotate(-1.1deg);
+  animation: ticketPin var(--dur-base) var(--ease-spring) both;
+}
+
+@keyframes ticketPin {
+  from {
+    opacity: 0;
+    transform: rotate(-6deg) translateY(-12px);
+  }
+}
+
+.ticket__pin {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #ff9fb6, #c4485f);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  transform: translateX(-50%);
+}
+
+.ticket__head {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-xs);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #a8724a;
+  text-align: center;
+  border-bottom: 1px dashed rgba(120, 80, 50, 0.4);
+  padding-bottom: 2px;
+  margin-bottom: var(--sp-2);
+}
+
+.ticket__line {
+  margin: 0 0 2px;
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.ticket__q {
+  margin-top: var(--sp-2);
+  font-weight: 800;
+  font-size: var(--text-sm);
+  color: var(--ink-800);
+}
+
+/* When a ticket is on screen the prompt below the equation would just repeat
+   the question printed on the docket — and the recipe card's done/upcoming
+   rows would compete with it for the same reading. The ticket *is* the
+   context, so the ladder shrinks to the one row being answered. */
+.lesson[data-mode="ticket"] .lesson__prompt {
+  display: none;
+}
+
+.lesson[data-mode="ticket"] .ladder__row:not([data-role="active"]) {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- sizing */
+
+/* Short screens — a phone in landscape is the worst case in the whole app,
+   and every mode has to survive it. Props shrink, the shelf band gives back
+   its height, and the chips drop to a single comfortable row. */
+@media (max-height: 620px) {
+  .lesson__mode {
+    --prop: 30px;
+    gap: var(--sp-2);
+  }
+
+  .chip {
+    min-height: 44px;
+    font-size: var(--text-lg);
+  }
+
+  .modeReady {
+    min-height: 46px;
+    font-size: var(--text-sm);
+  }
+
+  .ticket {
+    padding: var(--sp-2) var(--sp-3);
+  }
+
+  .ticket__line,
+  .ticket__q {
+    font-size: var(--text-xs);
+  }
+}
+
+/* A small phone upright, where the docket and the equation and a tappable
+   keypad genuinely do not all fit. The paper loses its decoration first — the
+   pin and the ORDER header are atmosphere, and the sentences are the question.
+   Measured against a 320x568 SE, which is the tightest device the app claims
+   to support. */
+@media (max-width: 560px) and (max-height: 700px) {
+  .ticket {
+    max-width: 100%;
+    margin-bottom: 0;
+    padding: var(--sp-2);
+    transform: none;
+  }
+
+  .ticket__pin,
+  .ticket__head {
+    display: none;
+  }
+
+  .ticket__line {
+    line-height: 1.25;
+  }
+
+  .ticket__q {
+    margin-top: var(--sp-1);
+  }
+}
+
+@media (max-height: 480px) {
+  .lesson__mode {
+    --prop: 26px;
+  }
+
+  .tray__count {
+    font-size: var(--text-xl);
+  }
+}
+
+/* Tablets get bigger props, because a ten-inch screen showing phone-sized
+   counters is the single clearest tell of a stretched build. */
+@media (min-width: 768px) and (min-height: 800px) {
+  .lesson__mode {
+    --prop: 62px;
+    gap: var(--sp-4);
+  }
+
+  .chip {
+    min-height: 64px;
+    font-size: var(--text-2xl);
+  }
+
+  .modeReady {
+    min-height: 64px;
+    font-size: var(--text-lg);
+  }
+
+  .ticket {
+    max-width: 34ch;
+  }
+
+  .ticket__line {
+    font-size: var(--text-md);
+  }
+
+  .ticket__q {
+    font-size: var(--text-md);
+  }
+
+  .rail__value {
+    font-size: var(--text-xl);
+  }
+
+  .burnt__cake {
+    font-size: var(--text-lg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode,
+  .ticket,
+  .tray__slot.is-full,
+  .slice__cake.is-cut,
+  .burnt__cake.is-burnt,
+  .lesson__mode[data-status="correct"] .mode,
+  .lesson__mode[data-status="retry"] .mode {
+    animation-duration: 1ms;
+  }
+
+  .rail__stop.is-blank .rail__value {
+    animation: none;
+  }
+}
+
+/* The "gone stale" badge. Its own line under the prompt, because it is a note
+   about the fact's history rather than part of the question — and because
+   glueing it onto a two-sentence mode prompt produced nonsense. */
+.lesson__stale {
+  margin: 0;
+  align-self: center;
+  padding: 2px var(--sp-3);
+  border-radius: var(--r-pill);
+  background: rgba(232, 138, 62, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(232, 138, 62, 0.35);
+  color: var(--ember-300);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+/* ---------------------------------------------------- short viewports
+
+   A phone held sideways gives the question band about 200px of height, and
+   `fitMode` bottoming out at its minimum prop is not enough on its own: the
+   gaps, labels and reserved lines are fixed costs that do not shrink with the
+   prop. So on short screens the modes give up their vertical luxuries — the
+   pile sits beside the plates instead of above them, reserved caption lines
+   collapse, and nothing wraps that can help it. */
+@media (max-height: 560px) {
+  .plates__board,
+  .slice__board,
+  .burnt__tray {
+    gap: var(--sp-2);
+  }
+
+  .plates__board {
+    flex-wrap: nowrap;
+  }
+
+  .plates__row,
+  .slice__board {
+    flex-wrap: nowrap;
+  }
+
+  .plates__pile {
+    min-height: calc(var(--prop) * 0.8);
+    padding: 4px;
+  }
+
+  .plates__question,
+  .slice__question {
+    min-height: 0;
+  }
+
+  .plates__pileLabel,
+  .slice__tally {
+    display: none;
+  }
+
+  .tray__readoutLabel {
+    display: none;
+  }
+
+  .rail__track {
+    padding: var(--sp-2) var(--sp-2) var(--sp-2);
+  }
+
+  .lesson__stale {
+    display: none;
+  }
+}
