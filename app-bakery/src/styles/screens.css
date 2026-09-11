@@ -1258,3 +1258,286 @@
 }
 
 .beat__card:focus { outline: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   The finale — closing time
+   ═══════════════════════════════════════════════════════════════════════════
+   No panel. Every other screen in the game puts its words on a card so they
+   stay legible over a busy room; the ending deliberately does not, so the
+   child is looking *into* the bakery rather than at a sheet of paper laid over
+   it. Legibility comes from the night palette being two stops darker than any
+   daytime room instead.                                                      */
+
+.finale {
+  padding: var(--sp-5) var(--sp-4);
+  justify-content: flex-start;
+  overflow-y: auto;
+  position: relative;
+}
+
+/* The no-panel rule was right about the intent and wrong about the execution. Photographed on a
+   phone, the headline landed straight across the bakery sign and the awning stripes, and the
+   sub-heading was simply unreadable. So instead of a card, a scrim: a soft column of shadow with
+   no edges, which takes the contrast back without ever reading as a sheet of paper laid over the
+   room. The decorations at the sides stay in full light, which is the whole point of ending
+   here.                                                                                        */
+.finale::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    130% 64% at 50% 36%,
+    rgba(10, 5, 3, 0.9) 0%,
+    rgba(10, 5, 3, 0.78) 44%,
+    rgba(10, 5, 3, 0) 80%
+  );
+}
+
+.finale__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  width: min(520px, 94vw);
+  text-align: center;
+  padding-block: var(--sp-6) var(--sp-5);
+  /* Auto margins, not `justify-content: center`. Centring a flex item that is taller than its
+     scrolling parent clips the top of it and makes the clipped part unreachable — the headline
+     was photographed cut in half. Auto margins centre when there is room and collapse to zero
+     when there is not.                                                                         */
+  margin-block: auto;
+}
+
+.finale__eyebrow {
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.finale__headline {
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 8vw, 2.8rem);
+  line-height: 1.05;
+  margin: 0;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
+}
+
+.finale__sub {
+  margin: 0;
+  max-width: 30ch;
+}
+
+.finale__stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  margin-top: var(--sp-5);
+}
+
+.finale__beats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* One grid for the whole tally, so the number column sizes itself to the widest value the
+     child actually earned. Per-row grids had to guess a width in `ch`, and `ch` resolves against
+     the list's font rather than the display font the numbers are set in — so "1424" and "6h 3m"
+     ran straight into their own labels.                                                        */
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  justify-content: center;
+  column-gap: 0.6em;
+  row-gap: var(--sp-3);
+  width: 100%;
+}
+
+/* Each line is dealt, not faded: it slides up from under the one above, which
+   reads as a stack being built rather than as text appearing. The `li` itself
+   is boxless so its two spans sit in the shared grid, so the animation lives
+   on the spans.                                                              */
+.finale__beat {
+  display: contents;
+}
+
+.finale__beatValue,
+.finale__beatLabel {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 420ms ease, transform 420ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.finale__beat.is-in > .finale__beatValue,
+.finale__beat.is-in > .finale__beatLabel {
+  opacity: 1;
+  transform: none;
+}
+
+.finale__beatValue {
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 7vw, 2.4rem);
+  color: var(--accent, #FFD9A0);
+  text-shadow: 0 0 22px rgba(255, 193, 119, 0.45);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.finale__beatLabel {
+  font-size: clamp(0.95rem, 3.6vw, 1.1rem);
+  text-align: left;
+  line-height: 1.25;
+  align-self: center;
+}
+
+.finale__beat.is-in > .finale__beatLabel {
+  opacity: 0.85;
+}
+
+.finale__rooms {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 500ms ease, transform 500ms ease;
+}
+
+.finale__rooms.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+.finale__room {
+  font-size: 0.85rem;
+  padding: 0.32em 0.85em;
+  border-radius: 999px;
+  background: rgba(255, 209, 154, 0.14);
+  border: 1px solid rgba(255, 209, 154, 0.3);
+}
+
+.finale__sign {
+  opacity: 0;
+  transform: translateY(10px) rotate(-1deg);
+  transition: opacity 600ms ease, transform 600ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  max-width: 32ch;
+}
+
+.finale__sign.is-in {
+  opacity: 1;
+  transform: rotate(-1deg);
+}
+
+.finale__signLine {
+  margin: 0 0 var(--sp-3);
+  opacity: 0.85;
+  line-height: 1.5;
+}
+
+.finale__signOff {
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 4.6vw, 1.5rem);
+  margin: 0;
+}
+
+.finale__signName {
+  margin: 0.35em 0 0;
+  opacity: 0.7;
+}
+
+.finale__done {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 420ms ease, transform 420ms ease;
+  pointer-events: none;
+}
+
+.finale__done.is-in {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* Above Crumb, not across him. Pinned to the bottom it landed exactly on his
+   face, which made the one instruction on the screen the least readable thing
+   on it.                                                                     */
+.finale__skip {
+  position: relative;
+  margin: var(--sp-4) 0 0;
+  text-align: center;
+  font-size: 0.8rem;
+  opacity: 0.5;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+
+.finale__skip.is-gone {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .finale__beat,
+  .finale__rooms,
+  .finale__sign,
+  .finale__done {
+    transition-duration: 1ms;
+  }
+}
+
+/* Short screens and landscape. The curtain call is a tall column by design, but at 393px of
+   height it becomes three screens of scrolling, so the beats go two-up and everything tightens.
+   The ending is the one screen where a child is only reading, so denser is not worse.          */
+@media (max-height: 620px) and (min-width: 560px) {
+  .finale {
+    padding: var(--sp-3) var(--sp-4);
+  }
+
+  .finale__panel {
+    padding-block: var(--sp-4) var(--sp-3);
+    gap: var(--sp-1);
+    width: min(760px, 96vw);
+  }
+
+  .finale__stack {
+    margin-top: var(--sp-3);
+    gap: var(--sp-3);
+  }
+
+  .finale__beats {
+    grid-template-columns: max-content 1fr max-content 1fr;
+    gap: var(--sp-2) var(--sp-4);
+  }
+
+  .finale__beat {
+    display: contents;
+  }
+
+  .finale__beatValue {
+    font-size: clamp(1.3rem, 4vw, 1.8rem);
+  }
+
+  .finale__beatLabel {
+    font-size: 0.85rem;
+    max-width: 16ch;
+  }
+
+  .finale__headline {
+    font-size: clamp(1.5rem, 5vw, 2rem);
+  }
+
+  .finale__signLine {
+    margin-bottom: var(--sp-2);
+  }
+
+  .finale__skip {
+    bottom: var(--sp-2);
+    margin-top: var(--sp-2);
+  }
+}

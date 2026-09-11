@@ -1,7 +1,6 @@
 import { audio } from "../core/audio";
 import { el, setChildren, stagger } from "../core/dom";
 import type { ScreenInstance, World } from "../world";
-import { FLUENT_MS } from "../game/mastery";
 import { allRecipes, opSymbol, sliceName, type Operation } from "../game/curriculum";
 import { store } from "../game/store";
 import { makeMapScreen } from "./map";
@@ -126,7 +125,7 @@ export function makeParentsScreen(world: World): ScreenInstance {
             statCard(
               "Fluent recall",
               String(s.fluent),
-              `Answered in under ${(FLUENT_MS / 1000).toFixed(1)}s`
+              `Answered in under ${(store.mastery.quickMs() / 1000).toFixed(1)}s — their own quick pace`
             )
           )
         ),

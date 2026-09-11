@@ -62,6 +62,12 @@ const CASES = [
   { mode: "burnt", recipe: "table:6", box: 5 },
   { mode: "ticket", recipe: "bond:14", box: 5 },
   { mode: "keypad", recipe: "bond:10", box: 3 },
+  // Not a mode: the ending. Photographed three times because it is the only screen in the game
+  // that changes on a timer, so a still of it half-built is the only way to know whether the
+  // curtain call reads while it is still arriving.
+  { screen: "finale", id: "finale-open", after: 900 },
+  { screen: "finale", id: "finale-mid", after: 5200 },
+  { screen: "finale", id: "finale-end", after: 900, skipAhead: true },
 ];
 
 let nextId = 1;
@@ -139,6 +145,120 @@ async function main() {
       });
       await send(ws, "Page.navigate", { url: URL_BASE });
       await sleep(900);
+
+      // ── The ending ───────────────────────────────────────────────────────────────────────
+      // A different screen with a different shape, so it takes a different path: seed a save that
+      // looks like a child who finished the whole game — every fact special, months of evenings,
+      // all the decorations — and go straight there.
+      if (kase.screen === "finale") {
+        const fok = await evaluate(
+          ws,
+          (sprinkles) => {
+            const api = window.crumb;
+            if (!api) return "no hook";
+            return import("/src/game/curriculum.ts").then(async (curriculum) => {
+              const screens = await import("/src/screens/finale.ts");
+              const now = Date.now();
+              for (const r of curriculum.allRecipes()) {
+                for (const f of r.facts) {
+                  const st = api.store.mastery.get(f.id);
+                  st.box = 7;
+                  st.seen = 4;
+                  st.correct = 4;
+                  st.streak = 4;
+                  st.bestMs = 1400 + (f.answer % 7) * 220;
+                  st.avgMs = 2600;
+                  st.lastSeen = now;
+                  st.holdsUntil = now + 864e5 * 21;
+                }
+              }
+              const playSeconds = {};
+              for (let d = 0; d < 34; d++) {
+                playSeconds[`2026-0${1 + (d % 3)}-${String(1 + (d % 28)).padStart(2, "0")}`] = 640;
+              }
+              api.store.update({
+                onboarded: true,
+                name: "Rosa",
+                chapter: 4,
+                unlockedChapter: 4,
+                sprinkles,
+                playSeconds,
+              });
+              await api.world.go(screens.makeFinaleScreen);
+              return "ok";
+            });
+          },
+          kase.sprinkles ?? 2600
+        );
+
+        await sleep(kase.after ?? 900);
+        if (kase.skipAhead) {
+          // A child who will not sit through it. The tap must land the whole thing at once.
+          await evaluate(ws, () => {
+            document
+              .querySelector(".finale")
+              ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+          });
+          await sleep(900);
+        }
+
+        const fshot = await send(ws, "Page.captureScreenshot", { format: "png" });
+        writeFileSync(join(OUT, `${size.id}-${kase.id}.png`), Buffer.from(fshot.data, "base64"));
+
+        const fm = await evaluate(ws, () => {
+          const panel = document.querySelector(".finale");
+          if (!panel) return null;
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+          let worstLeft = 0;
+          let worstRight = 0;
+          let worstBottom = 0;
+          let culprit = null;
+          const tinyTargets = [];
+          for (const n of panel.querySelectorAll("*")) {
+            const r = n.getBoundingClientRect();
+            if (r.width === 0 || getComputedStyle(n).opacity === "0") continue;
+            const over = Math.max(-r.left, r.right - vw, r.bottom - vh);
+            if (over > Math.max(worstLeft, worstRight, worstBottom)) {
+              culprit = `${n.tagName}.${n.className} over=${Math.round(over)}`;
+            }
+            worstLeft = Math.max(worstLeft, -r.left);
+            worstRight = Math.max(worstRight, r.right - vw);
+            // The finale scrolls on purpose, so only a *button* below the fold is a fault: a child
+            // who cannot see the way out is stuck.
+            if (n.tagName === "BUTTON") {
+              worstBottom = Math.max(worstBottom, r.bottom - vh);
+              const min = Math.min(r.width, r.height);
+              if (min < 30) tinyTargets.push({ cls: n.className, w: Math.round(r.width), h: Math.round(r.height) });
+            }
+          }
+          return {
+            overflowLeft: Math.round(worstLeft),
+            overflowRight: Math.round(worstRight),
+            overflowTop: 0,
+            overflowBottom: Math.round(worstBottom),
+            culprit,
+            tinyTargets,
+            // A line of the curtain call must arrive whole. Half of one showing early — the label
+            // visible while its number is still hidden — is what a cascade slip looks like from
+            // the outside, and it reads as a rendering fault rather than as pacing.
+            leaked: Array.from(panel.querySelectorAll(".finale__beat:not(.is-in)"))
+              .flatMap((li) => Array.from(li.children))
+              .filter((n) => Number(getComputedStyle(n).opacity) > 0.02)
+              .map((n) => `${n.className}:${n.textContent}`),
+            hostBox: `beats=${panel.querySelectorAll(".finale__beat.is-in").length}/${panel.querySelectorAll(".finale__beat").length} done=${panel.querySelector(".finale__done")?.classList.contains("is-in")} scroll=${Math.round(panel.scrollHeight)}/${Math.round(panel.clientHeight)}`,
+            prompt: panel.querySelector(".finale__headline")?.textContent ?? "",
+          };
+        });
+
+        results.push({ size: size.id, mode: kase.id, ok: fok, ...fm });
+        console.log(
+          `${size.id.padEnd(10)} ${kase.id.padEnd(16)} ${String(fok).padEnd(12)} ` +
+            `overflow L${fm?.overflowLeft} R${fm?.overflowRight} B${fm?.overflowBottom} ` +
+            `tiny=${fm?.tinyTargets.length ?? "-"} ${fm?.hostBox ?? ""}`
+        );
+        continue;
+      }
 
       const ok = await evaluate(
         ws,
@@ -295,12 +415,13 @@ async function main() {
       r.overflowRight > 2 ||
       r.overflowTop > 2 ||
       r.overflowBottom > 2 ||
+      (r.leaked?.length ?? 0) > 0 ||
       (r.tinyTargets?.length ?? 0) > 0
   );
   console.log(`\n${results.length} shots, ${bad.length} problems`);
   for (const b of bad) {
     console.log(
-      `  ${b.size}/${b.mode}: ok=${b.ok} L${b.overflowLeft} R${b.overflowRight} T${b.overflowTop} B${b.overflowBottom} tiny=${JSON.stringify(b.tinyTargets)} ${b.culprit ?? ""} | ${b.hostBox ?? ""}`
+      `  ${b.size}/${b.mode}: ok=${b.ok} L${b.overflowLeft} R${b.overflowRight} T${b.overflowTop} B${b.overflowBottom} tiny=${JSON.stringify(b.tinyTargets)} leaked=${JSON.stringify(b.leaked ?? [])} ${b.culprit ?? ""} | ${b.hostBox ?? ""}`
     );
   }
   ws.close();

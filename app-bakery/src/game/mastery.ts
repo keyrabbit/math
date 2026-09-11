@@ -120,6 +120,8 @@ export interface RecipeProgress {
 
 export class Mastery {
   private facts = new Map<string, FactState>();
+  private paceCache = 0;
+  private paceDirty = true;
 
   constructor(serialized?: Record<string, FactState>) {
     if (serialized) {
@@ -144,6 +146,7 @@ export class Mastery {
 
   record(id: string, correct: boolean, responseMs: number, now = Date.now()): FactState {
     const s = this.get(id);
+    const quick = this.quickMs();
     s.seen += 1;
     s.lastSeen = now;
     if (correct) {
@@ -151,10 +154,26 @@ export class Mastery {
       s.streak += 1;
       s.bestMs = s.bestMs === 0 ? responseMs : Math.min(s.bestMs, responseMs);
       s.avgMs = s.avgMs === 0 ? responseMs : s.avgMs * 0.7 + responseMs * 0.3;
+      this.paceDirty = true;
       // Promote on any correct answer, but a slow answer only earns a short freshness: fluency and
       // accuracy are different skills and the schedule should reflect that.
-      const slow = responseMs > FLUENT_MS && s.box >= 2;
-      s.box = slow ? s.box : Math.min(s.box + 1, SPECIAL_BOX);
+      const slow = responseMs > quick && s.box >= 2;
+      if (slow) {
+        // holds where it is
+      } else if (
+        // Two quick answers in a row on a fact that is already well known means the review was not
+        // needed. Skipping a box is how a child who genuinely knows their tables stops being asked
+        // about 2 x 2 for another week, which is the single most common reason an older child
+        // abandons a game like this: it keeps testing them on things they finished months ago.
+        s.box >= 3 &&
+        s.streak >= 2 &&
+        responseMs <= quick * 0.7 &&
+        s.box < SPECIAL_BOX
+      ) {
+        s.box = Math.min(s.box + 2, SPECIAL_BOX);
+      } else {
+        s.box = Math.min(s.box + 1, SPECIAL_BOX);
+      }
       s.holdsUntil = now + HOLD_MINUTES[s.box] * 60_000;
     } else {
       s.streak = 0;
@@ -164,6 +183,39 @@ export class Mastery {
       s.holdsUntil = now + HOLD_MINUTES[s.box] * 60_000;
     }
     return s;
+  }
+
+  /**
+   * How fast *this* child answers when they know it, in ms.
+   *
+   * A fixed fluency threshold is the wrong instrument, and it is wrong in both directions at once.
+   * A five-year-old loading eight buns onto a tray one tap at a time cannot physically answer
+   * inside three and a half seconds, so they would never once be credited with fluency on a fact
+   * they know perfectly well. A nine-year-old on the keypad beats it on almost everything,
+   * including the facts they are actually counting on their fingers for.
+   *
+   * So the bar is the child's own median settled answer time — computed from `avgMs`, which is
+   * already persisted per fact, so this needs no save migration and survives across sessions. The
+   * clamp stops a single very long first session (a child who wandered off mid-question) from
+   * moving the bar somewhere useless.
+   */
+  paceMs(): number {
+    if (!this.paceDirty && this.paceCache > 0) return this.paceCache;
+    const times = [...this.facts.values()].filter((s) => s.correct >= 2 && s.avgMs > 0).map((s) => s.avgMs);
+    this.paceDirty = false;
+    if (times.length < 6) {
+      this.paceCache = FLUENT_MS;
+      return this.paceCache;
+    }
+    times.sort((a, b) => a - b);
+    const mid = times[Math.floor(times.length / 2)];
+    this.paceCache = Math.min(12_000, Math.max(1_500, mid));
+    return this.paceCache;
+  }
+
+  /** The "they knew that one" bar: a shade under the child's own working speed. */
+  quickMs(): number {
+    return this.paceMs() * 0.85;
   }
 
   /** Has this treat ever been baked? */
@@ -292,7 +344,7 @@ export class Mastery {
       if (s.box >= RETAINED_BOX) retained += 1;
       if (s.box >= SPECIAL_BOX) special += 1;
       if (this.isStale(id, now)) stale += 1;
-      if (s.bestMs > 0 && s.bestMs <= FLUENT_MS) fluent += 1;
+      if (s.bestMs > 0 && s.bestMs <= this.quickMs()) fluent += 1;
       correct += s.correct;
       seen += s.seen;
     }
@@ -314,6 +366,31 @@ export class Mastery {
       .map(([id, s]) => ({ id, accuracy: s.correct / s.seen, seen: s.seen }))
       .sort((a, b) => a.accuracy - b.accuracy)
       .slice(0, limit);
+  }
+
+  /**
+   * The numbers a child has actually earned, for the curtain call.
+   *
+   * Separate from `summary()` because that one answers a parent's question — how is this going? —
+   * whereas these answer a child's: what did I *do*? So it counts total answers rather than an
+   * accuracy ratio, and the single fastest answer rather than a fluency count, because "you
+   * answered nine hundred questions and your quickest was under a second" is a thing a
+   * seven-year-old will tell somebody about, and "84% accuracy" is not.
+   */
+  lifetime(): { answers: number; right: number; baked: number; fastestMs: number; bestStreak: number } {
+    let answers = 0;
+    let right = 0;
+    let baked = 0;
+    let fastestMs = 0;
+    let bestStreak = 0;
+    for (const s of this.facts.values()) {
+      answers += s.seen;
+      right += s.correct;
+      if (s.box >= 1) baked += 1;
+      if (s.bestMs > 0 && (fastestMs === 0 || s.bestMs < fastestMs)) fastestMs = s.bestMs;
+      if (s.streak > bestStreak) bestStreak = s.streak;
+    }
+    return { answers, right, baked, fastestMs, bestStreak };
   }
 
   /**

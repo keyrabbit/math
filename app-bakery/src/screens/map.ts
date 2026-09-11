@@ -10,6 +10,7 @@ import { chapterIsComplete, unlockedChapters, enterChapter, leastRecent } from "
 import { makeLessonScreen } from "./lesson";
 import { makeCaseScreen } from "./case";
 import { makeParentsScreen } from "./parents";
+import { makeFinaleScreen } from "./finale";
 
 /**
  * The day's order board.
@@ -176,6 +177,25 @@ export function makeMapScreen(world: World): ScreenInstance {
       },
     })
   );
+
+  // Once every chapter is finished the ending stops being a one-off cutscene and becomes a place.
+  // A child who worked for months to see it will want to show somebody, and an ending you can only
+  // watch once is an ending most parents never see.
+  if (CHAPTERS.every((c) => chapterIsComplete(c, store.mastery))) {
+    buttons.append(
+      el("button", {
+        class: "btn btn--ghost",
+        type: "button",
+        textContent: "Closing time",
+        on: {
+          click: () => {
+            audio.select();
+            void world.go(makeFinaleScreen);
+          },
+        },
+      })
+    );
+  }
 
   const totalBaked = recipes.reduce((n, r) => n + mastery.progress(r).baked, 0);
   const totalTreats = recipes.reduce((n, r) => n + r.facts.length, 0);

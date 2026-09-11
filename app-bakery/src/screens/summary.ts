@@ -7,6 +7,7 @@ import { store } from "../game/store";
 import { enterChapter, nextChapterIndex } from "../game/progress";
 import { decorEarnedBetween, nextDecor } from "../game/decor";
 import { makeMapScreen } from "./map";
+import { makeFinaleScreen } from "./finale";
 
 interface SummaryArgs {
   recipe: Recipe;
@@ -166,7 +167,7 @@ export function makeSummaryScreen(args: SummaryArgs): (world: World) => ScreenIn
           el("button", {
             class: "btn btn--primary btn--large",
             textContent: gameFinished
-              ? "Back to the bakery"
+              ? "Turn the lamps down"
               : nextTitle
                 ? `Open ${nextTitle}`
                 : "Keep going",
@@ -178,7 +179,7 @@ export function makeSummaryScreen(args: SummaryArgs): (world: World) => ScreenIn
                 // Doing it here, on the button they are already reaching for, means progression
                 // never needs explaining.
                 if (nextChapter !== null) enterChapter(nextChapter);
-                void world.go(makeMapScreen);
+                void world.go(gameFinished ? makeFinaleScreen : makeMapScreen);
               },
             },
           })

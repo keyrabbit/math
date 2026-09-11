@@ -92,6 +92,29 @@ export const ROOMS: Record<string, Room> = {
     droneRoot: -19,
     moteDensity: 1.8,
   },
+
+  /**
+   * Closing time. Not a sixth chapter — the room the finale happens in, once every shelf in the
+   * bakery is full.
+   *
+   * Still firmly inside the "warm oven light" rule: the lamps are off and the wall has gone to a
+   * deep roasted brown, but the glow low in the frame is *stronger* than in any daytime room, not
+   * weaker, because the one thing still lit is the oven. Taking the warmth out to signal night
+   * would have made the ending colder than the game, which is the opposite of what an ending is
+   * for. Flour has settled, so the motes are sparse and slow.
+   */
+  night: {
+    id: "night",
+    name: "After Closing",
+    wallTop: "#1A0E08",
+    wallMid: "#37200F",
+    wallGlow: "#FFC177",
+    shelves: ["#33200F", "#26170B", "#1A0F07", "#100803"],
+    accent: "#FFD9A0",
+    deep: "#0A0503",
+    droneRoot: -24,
+    moteDensity: 0.45,
+  },
 };
 
 /** A speck of flour or a stray sprinkle hanging in the warm air. */
