@@ -542,3 +542,114 @@ Run eight — a ninth-birthday completionist, 75 lessons, 584 questions, 393x852
 with every recipe baked, every one of the 356 facts learned, and zero issues, zero console errors
 and zero exceptions. Run seven, a cautious five-year-old over 20 lessons, the same. Both iOS
 simulators build, launch and persist.
+
+## Not just a keypad
+
+The honest review at the end of the last round said the quiet part out loud: every question in the
+game, in all five chapters, was answered by typing a number into a keypad. The bakery was a
+painting hung behind an arithmetic drill. A child who has done thirty lessons has tapped the same
+ten keys four hundred times, and no amount of art direction fixes that, because the thing they are
+actually doing has not changed since the first minute.
+
+So the lesson now asks its questions in seven ways, and the keypad is one of them.
+
+- **the tray** — put the buns on the tray. `7 + 5` means placing twelve. Counting, with hands.
+- **the counting rail** — a number line. Start at the bigger number, count on, tap where you land.
+- **the plates** — deal the biscuits out one at a time until every plate matches. That *is* division.
+- **the slicing board** — cut the cake and take the pieces the ticket asks for.
+- **spot the burnt one** — three iced cakes, one with the wrong sum on it. A joke, not a test.
+- **the ticket** — the order is written out, four prices to choose from.
+- **the keypad** — still here, and still the fastest way to answer something you simply know.
+
+The interaction grammar is one rule: **choosing commits instantly, building needs a tick.** A rail
+stop or a burnt cake is a decision, so tapping it *is* the answer. A tray or a plate is a
+construction, so it waits until the child says they are done. Mixing those two is how a game
+punishes a child for exploring.
+
+Which mode appears is not random decoration. At box 0 — a fact the child has never got right — only
+the hands-on modes are allowed, because a keypad asks a child to already know the answer. At box 4
+and above, a fact the child has held over a night, the pool is the fast ones: burnt, ticket, keypad.
+In between it is mixed, weighted towards typing. A mode also has to *fit* the fact: there is no
+point offering a tray for `9 x 7`, and a rail for `5 x 1` has nothing to count.
+
+The de-risking decision worth recording: the keypad and the ticket are not modes at all in the
+implementation. They ride the lesson's existing equation-and-keypad path, and only the five
+hands-on modes are real `ModeInstance`s. Everything still funnels through a single `resolve()`.
+Seven ways to ask, one way to be right.
+
+### Eighteen bugs that only a camera could see
+
+`tools/modeshots.mjs` was written before the playtests rather than after them, and that ordering
+was the single best decision of the round. It photographs every mode at eight screen sizes — plus
+each one immediately after a wrong answer, because the state a child has to *act on* is the one
+after they get something wrong, and it had never been looked at. It measures overflow on all four
+edges and flags any tap target under 44px.
+
+It found eighteen real layout bugs. Text-reading runs had scored every one of them clean.
+
+The recurring cause is that a prop has to fit a room whose height is whatever the header, equation,
+hint line and keypad left over. That is not arithmetic, it is a search: one custom property sizes
+every prop, and the lesson steps it from 128px down to 18px and takes the first value that fits in
+both directions. Things learned the hard way and worth not relearning: `[hidden]` is a no-op
+against any rule with its own `display`; centring a too-tall flex child in a scroller clips its top
+*and puts it out of reach*, so it needs `margin-block: auto` against `flex-start`; `ch` resolves
+against the element's own font, so a grid column sized in `ch` overflows the moment the values use
+a display face; `display: contents` elements have no box at all, so `getBoundingClientRect()`
+returns zeros and `scrollIntoView()` silently does nothing; and a two-layer CSS `mask` shorthand
+did nothing whatsoever in this engine across three photographed attempts.
+
+That last one produced the round's most on-brand bug. The burnt-cake mode was photographed in a
+real run and turned out to be **three beige cards with sums written on them**. The mode is called
+"spot the burnt one" and there was nothing on the screen resembling a cake, so the joke had nothing
+to land on — it was the keypad with bigger buttons. They are now iced, dripping, sprinkled and
+sitting in fluted paper cases, and the drip is painted as half-circles of icing hanging over the
+sponge rather than cut out with a mask, because that is the version that can be seen working in the
+frames rather than the version that reads better in the stylesheet.
+
+### The mode nobody ever saw
+
+Run thirteen finished the entire game — 70 lessons, 556 questions, all 356 facts — and the mode
+histogram read `burnt=0`. The mode had never been shown. Not once. It was gated on box 4, and box 4
+requires a fact to survive a night's hold, and nobody sleeps in the middle of a session. A feature
+can be fully built, unit-clean, photographed at eight sizes and completely unreachable. It joins
+the pool at box 2 now, and the next run showed it eleven times.
+
+The same run found the plates mode wiping the entire deal when a share came out uneven, so a child
+who dealt fourteen biscuits and got one plate wrong lost all fourteen. It now takes back only the
+surplus and leaves the rest where they are, which is what a person does with a tray of biscuits.
+
+### An ending, a pace, and a number that meant nothing
+
+Three things the review asked for that were not features so much as missing endings.
+
+There is now a **closing time**. Fill every shelf in every room and Crumb turns the lamps down: the
+bakery at night, still warm, the day's numbers read out one beat at a time, and a last look at
+everything that got built. It is reachable from the final summary and, forever after, from the map.
+
+The **schedule runs at the child's pace**. "Fast" used to be a hard 3.5 seconds, which is fast for a
+nine-year-old and impossible for a five-year-old, so one of them was always being told they were
+slow. It is now the median of that child's own answer times, clamped to something sane, and it
+feeds both the promotion rule and the parent report. A child who is genuinely quick on something
+they already know now skips a box entirely.
+
+And the ending's "best run" was a lie: after 481 correct answers it proudly announced **2 in a row**,
+because the only streak the game stored was per-fact. Nothing in the mastery record knows what
+order the answers came in. It records a real one now.
+
+### Two harness rules, both learned by ruining a run
+
+**Never edit app source while a playtest is driving the dev server.** Vite's hot reload injected
+`ReferenceError`s into a running child and invalidated the whole run. Build once, serve it frozen.
+
+**Never drive the same headless browser while a playtest runs.** Taking screenshots during run
+fifteen navigated the shared page to `about:blank` mid-lesson and produced a `SecurityError` on
+localStorage. One browser at a time; the playtest gets the frozen build on one port and the camera
+gets the dev server on another.
+
+### Where it ended up
+
+Ten playtest runs this round, three personas. Runs sixteen, seventeen and eighteen came back with
+zero issues, zero console errors and zero exceptions — a completionist nine-year-old who reached
+the ending, a cautious five-year-old on a cold install, and a seven-year-old trying to break it.
+All 712 equations fit at all eight device sizes. 64 mode photographs, no overflow, no tiny targets.
+Both iOS simulators build, launch, render and persist.
