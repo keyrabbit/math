@@ -2,6 +2,7 @@ import { damp } from "../core/spring";
 import { makeRng } from "../core/rng";
 import type { DrawContext } from "./stage";
 import { glow, mixHex, withAlpha } from "./stage";
+import { BEHIND_SHELVES, DECOR_ART } from "./decorArt";
 
 export interface Room {
   id: string;
@@ -224,6 +225,8 @@ export class Scenery {
   private seed: number;
   private lastWidth = 0;
   private lastHeight = 0;
+  /** Decoration ids the child has earned, in `DECOR` order. */
+  private decor: string[] = [];
 
   constructor(roomId: keyof typeof ROOMS = "kitchen", seed = 1337) {
     this.room = ROOMS[roomId];
@@ -241,6 +244,16 @@ export class Scenery {
 
   get current(): Room {
     return this.targetRoom;
+  }
+
+  /**
+   * Which decorations are standing in the room.
+   *
+   * Called on every screen that draws the bakery, from the child's lifetime sprinkle total. The
+   * whole point of the currency is that the room changes, so the room has to be told.
+   */
+  setDecor(ids: string[]): void {
+    this.decor = ids;
   }
 
   /** Pointer-driven parallax. Values are normalised -1..1. */
@@ -377,6 +390,10 @@ export class Scenery {
     const px = this.parallaxX;
     const py = this.parallaxY;
 
+    // Decorations that belong to the architecture go behind the shelving, so the oven's light
+    // spills up *past* the crockery rather than over it.
+    this.paintDecor(c, r, true);
+
     // Flour motes catch the light. They twinkle at individually random rates so the air never
     // pulses in unison.
     for (const m of this.motes) {
@@ -418,6 +435,28 @@ export class Scenery {
       ctx.strokeStyle = withAlpha(r.accent, 0.14 - depth * 0.025);
       ctx.lineWidth = 1.5;
       ctx.stroke();
+    }
+
+    this.paintDecor(c, r, false);
+  }
+
+  /**
+   * Paint the earned decorations.
+   *
+   * Split either side of the shelving rather than drawn in one pass, because the oven is part of
+   * the back wall and everything else stands in the room. Wrapped in save/restore per item so one
+   * painter leaving a clip or a transform behind cannot corrupt the next.
+   */
+  private paintDecor(c: DrawContext, r: Room, behind: boolean): void {
+    if (this.decor.length === 0) return;
+    const { ctx, width, height, elapsed } = c;
+    for (const id of this.decor) {
+      if (BEHIND_SHELVES.has(id) !== behind) continue;
+      const paint = DECOR_ART[id];
+      if (!paint) continue;
+      ctx.save();
+      paint(ctx, width, height, r, elapsed);
+      ctx.restore();
     }
   }
 

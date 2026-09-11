@@ -166,6 +166,16 @@ export function platesMode(ctx: ModeContext): ModeInstance {
     spoken: `Share ${totalTreats} treats fairly onto ${plateCount} plates, then say how many are on each.`,
     hint: `Give one to every plate, then go round again. ${plateCount} plates, ${perPlate} times round.`,
     anchor: () => centreOf(lastTouched) ?? centreOf(row),
+    reveal: () => {
+      counts.fill(perPlate);
+      remaining = 0;
+      phase = "answering";
+      question.textContent = `One plate, ${perPlate} each.`;
+      question.classList.remove("is-nudge");
+      chips.element.hidden = true;
+      paintPile();
+      paintPlates();
+    },
     retry: () => {
       counts.fill(0);
       remaining = totalTreats;

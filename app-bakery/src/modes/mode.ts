@@ -34,6 +34,14 @@ export interface ModeInstance {
   /** Put the mode back to a state the child can answer from, after a wrong answer. */
   retry?(): void;
   /**
+   * Put the props into the state that would have been the right answer.
+   *
+   * Called once, when the lesson gives up on the child's behalf after three misses. A number read
+   * out is a fact; a tray filled to eight in front of them is a demonstration, and the second one
+   * is what the mode existed to provide in the first place.
+   */
+  reveal?(): void;
+  /**
    * Where the reward should burst from — the treat the child just made, not a fixed point. The
    * whole feel of "I did that" comes from the sparkle starting where their finger was.
    */

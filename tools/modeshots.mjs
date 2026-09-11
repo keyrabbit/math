@@ -44,7 +44,14 @@ const SIZES = [
  */
 const CASES = [
   { mode: "tray", recipe: "bond:8", box: 0 },
+  // The same mode again, with every decoration bought. Not a mode test: it is the only way to see
+  // whether a fully decorated bakery still leaves the question legible.
+  { mode: "tray", recipe: "bond:8", box: 0, sprinkles: 2600, id: "decor" },
   { mode: "rail", recipe: "table:5", box: 0, skip: 2 },
+  // The counting rail: the same track drawn as a plain number line for a bond. Widest case in the
+  // game — up to eight tappable stops — so it is the one most likely to overflow a phone.
+  { mode: "rail", recipe: "bond:9", box: 0, id: "rail-count" },
+  { mode: "rail", recipe: "bond:20", box: 0, skip: 4, id: "rail-count-20" },
   { mode: "plates", recipe: "share:4", box: 0 },
   { mode: "slice", recipe: "fraction:4", box: 0 },
   { mode: "burnt", recipe: "table:6", box: 5 },
@@ -130,7 +137,7 @@ async function main() {
 
       const ok = await evaluate(
         ws,
-        (recipeKey, box, wanted, skip) => {
+        (recipeKey, box, wanted, skip, sprinkles) => {
           const api = window.crumb;
           if (!api) return "no hook";
           return import("/src/game/curriculum.ts").then(async (curriculum) => {
@@ -163,7 +170,7 @@ async function main() {
             const chapterIndex = curriculum.CHAPTERS.findIndex((c) =>
               curriculum.chapterRecipes(c).some((r) => r.key === recipeKey)
             );
-            api.store.update({ onboarded: true, chapter: chapterIndex, unlockedChapter: 4 });
+            api.store.update({ onboarded: true, chapter: chapterIndex, unlockedChapter: 4, sprinkles });
             // Mark every one-off story beat as already seen: they are correct behaviour but they
             // cover the very thing being photographed.
             for (const key of [
@@ -193,13 +200,14 @@ async function main() {
         kase.recipe,
         kase.box,
         kase.mode,
-        kase.skip ?? 0
+        kase.skip ?? 0,
+        kase.sprinkles ?? 0
       );
 
       await sleep(1100);
 
       const shot = await send(ws, "Page.captureScreenshot", { format: "png" });
-      const name = `${size.id}-${kase.mode}.png`;
+      const name = `${size.id}-${kase.id ?? kase.mode}.png`;
       writeFileSync(join(OUT, name), Buffer.from(shot.data, "base64"));
 
       // Measure everything that could overflow. The band between the title and the keypad is the
@@ -220,9 +228,9 @@ async function main() {
         let tinyTargets = [];
         for (const n of nodes) {
           const r = n.getBoundingClientRect();
-          const over = Math.max(b.left - r.left, r.right - b.right);
-          if (over > Math.max(worstLeft, worstRight)) {
-            culprit = `${n.tagName}.${n.className} w=${Math.round(r.width)}`;
+          const over = Math.max(b.left - r.left, r.right - b.right, b.top - r.top, r.bottom - b.bottom);
+          if (over > Math.max(worstLeft, worstRight, worstTop, worstBottom)) {
+            culprit = `${n.tagName}.${n.className} ${Math.round(r.width)}x${Math.round(r.height)} over=${Math.round(over)}`;
           }
           worstLeft = Math.max(worstLeft, b.left - r.left);
           worstRight = Math.max(worstRight, r.right - b.right);
@@ -242,15 +250,15 @@ async function main() {
           tinyTargets,
           hostHidden: host?.hidden ?? null,
           hostBox: host
-            ? `prop=${getComputedStyle(host).getPropertyValue("--prop").trim()} room=${Math.round(host.clientWidth)}x${Math.round(host.clientHeight)} content=${Math.round(host.firstElementChild?.getBoundingClientRect().width ?? 0)}x${Math.round(host.firstElementChild?.getBoundingClientRect().height ?? 0)}`
+            ? `prop=${getComputedStyle(host).getPropertyValue("--prop").trim()} room=${Math.round(host.clientWidth)}x${Math.round(host.clientHeight)} fit=${host.dataset.room} body=${Math.round(body.clientHeight)} content=${Math.round(host.firstElementChild?.getBoundingClientRect().width ?? 0)}x${Math.round(host.firstElementChild?.getBoundingClientRect().height ?? 0)}`
             : null,
           prompt: document.querySelector(".lesson__prompt")?.textContent ?? "",
         };
       });
 
-      results.push({ size: size.id, mode: kase.mode, ok, ...metrics });
+      results.push({ size: size.id, mode: kase.id ?? kase.mode, ok, ...metrics });
       console.log(
-        `${size.id.padEnd(10)} ${kase.mode.padEnd(8)} ${String(ok).padEnd(12)} ` +
+        `${size.id.padEnd(10)} ${(kase.id ?? kase.mode).padEnd(8)} ${String(ok).padEnd(12)} ` +
           `overflow L${metrics?.overflowLeft} R${metrics?.overflowRight} ` +
           `T${metrics?.overflowTop} B${metrics?.overflowBottom} ` +
           `tiny=${metrics?.tinyTargets.length ?? "-"} ${metrics?.hostBox ?? ""}`

@@ -7,6 +7,7 @@ import { Crumb, paletteForRoom } from "./render/crumb";
 import { ROOMS, Scenery } from "./render/scenery";
 import { Stage } from "./render/stage";
 import { store } from "./game/store";
+import { unlockedDecor } from "./game/decor";
 
 export interface ScreenInstance {
   element: HTMLElement;
@@ -29,6 +30,8 @@ export type ScreenFactory = (world: World) => ScreenInstance;
 export class World {
   readonly stage: Stage;
   readonly scenery: Scenery;
+  /** Last sprinkle total the scenery was told about. See `syncDecor`. */
+  private decorTotal = -1;
   readonly crumb: Crumb;
   readonly particles: Particles;
   readonly shelf = new ShelfView();
@@ -63,6 +66,7 @@ export class World {
   private buildLayers(): void {
     // z=0 backdrop
     this.stage.add((c) => {
+      this.syncDecor();
       this.scenery.update(c.dt);
       this.scenery.drawBackground(c);
       if (!this.reducedMotion) {
@@ -128,6 +132,22 @@ export class World {
       this.crumb.palette = paletteForRoom(r.accent, r.deep);
       audio.startAmbience(r.droneRoot);
     }
+  }
+
+  /**
+   * Keep the room's decorations in step with the sprinkle total.
+   *
+   * Polled from the draw loop, guarded by a cached total so it costs one integer comparison a
+   * frame. Polling rather than an event because sprinkles are added from half a dozen places and a
+   * decoration that appears one screen late is worse than no decoration at all — the child earns
+   * the bunting *during* a lesson, and the bunting should go up during that lesson, while they can
+   * still see the number that bought it.
+   */
+  private syncDecor(): void {
+    const total = store.state.sprinkles;
+    if (total === this.decorTotal) return;
+    this.decorTotal = total;
+    this.scenery.setDecor(unlockedDecor(total).map((d) => d.id));
   }
 
   /** Celebration helper used by every mode, so reward always feels identical. */

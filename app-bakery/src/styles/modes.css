@@ -24,9 +24,12 @@
   justify-content: center;
   gap: var(--sp-3);
   width: 100%;
-  /* Takes every pixel the keypad is not using, so `fitMode` has a real box to
-     measure against rather than the mode's own content height. */
-  flex: 1 1 auto;
+  /* Content-sized, so `.lesson__body` can centre the question and its props as
+     a single group. It used to be `flex: 1 1 auto` to give `fitMode` a box to
+     measure; `fitMode` now works the room out from the body instead, because
+     a greedy host strands every short mode two-thirds of the way down a
+     tablet screen. */
+  flex: 0 0 auto;
   min-height: 0;
   padding-inline: var(--sp-3);
   /* The prop size for every mode. One knob, turned by the media queries at the
@@ -39,6 +42,22 @@
 
 .lesson__mode[hidden] {
   display: none;
+}
+
+/* Hands-on questions sit directly under the recipe title, not in the middle of
+   whatever is left.
+   
+   With the keypad gone a tablet leaves the body some 800px, and a four-stop
+   number line centred in that lands two-thirds of the way down the screen with
+   a lake of empty bakery between it and the question it answers. Packing to the
+   start puts the props where the eye already is. It also means that if a mode
+   ever does overflow, it clips at the bottom only, rather than the centred
+   layout's trick of spilling over the title *and* under the keypad at once.
+   The keypad and ticket frames keep the centred layout they were designed
+   around. */
+.lesson:not([data-mode="keypad"]):not([data-mode="ticket"]) .lesson__body {
+  justify-content: flex-start;
+  padding-top: var(--sp-2);
 }
 
 .mode {
@@ -375,6 +394,71 @@
 
 .rail__stop.is-target .rail__value {
   color: var(--ember-300);
+}
+
+/* ── The counting rail ───────────────────────────────────────────────────────
+   A plain number line with every stop labelled and every stop tappable. There
+   is no chip row: the track *is* the answer surface, so the stops have to look
+   pressable and be big enough to hit with a five-year-old's finger. */
+
+.rail__track--count {
+  gap: clamp(2px, 1vw, 8px);
+}
+
+.rail__stop--pick {
+  appearance: none;
+  border: 1px solid rgba(255, 236, 210, 0.14);
+  border-radius: var(--r-md);
+  background: rgba(255, 246, 232, 0.05);
+  color: inherit;
+  font: inherit;
+  padding: calc(var(--prop) * 0.12) calc(var(--prop) * 0.06);
+  min-width: clamp(30px, calc(var(--prop) * 0.82), 84px);
+  min-height: 48px;
+  cursor: pointer;
+  transition: transform var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .rail__stop--pick:hover:not(:disabled) {
+    background: rgba(255, 246, 232, 0.12);
+    transform: translateY(-2px);
+  }
+}
+
+.rail__stop--pick:active:not(:disabled) {
+  transform: translateY(1px) scale(0.97);
+}
+
+.rail__stop--pick:disabled {
+  cursor: default;
+}
+
+/* Where Crumb is standing now. This is the one thing the child must be able to
+   find instantly — every hop is counted from here. */
+.rail__stop--pick.is-start {
+  background: rgba(255, 236, 210, 0.16);
+  border-color: var(--ember-400);
+  box-shadow: var(--glow-accent);
+}
+
+.rail__stop--pick.is-start .rail__peg {
+  background: var(--ember-400);
+  box-shadow: var(--glow-accent);
+  animation: railPulse 1.8s var(--ease-in-out) infinite;
+}
+
+.rail__stop--pick.is-landed {
+  background: rgba(126, 217, 154, 0.22);
+  border-color: rgba(126, 217, 154, 0.8);
+}
+
+.rail__stop--pick.is-landed .rail__peg {
+  background: rgb(126, 217, 154);
+}
+
+.rail__stop--pick.is-out {
+  opacity: 0.4;
 }
 
 @keyframes railPulse {

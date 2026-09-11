@@ -246,8 +246,93 @@ const READ = `(() => {
     return { a, b, op, r, answer, frame };
   };
   const save = (() => { try { return JSON.parse(localStorage.getItem('crumbs-bakery.save.v1') || 'null'); } catch (e) { return null; } })();
+  const lessonEl = q('.lesson');
+  const mode = lessonEl ? (lessonEl.dataset.mode || 'keypad') : null;
+  const chips = [...document.querySelectorAll('.chip')].map((n) => ({
+    text: (n.textContent || '').trim(),
+    value: Number((n.textContent || '').trim()),
+    disabled: !!n.disabled,
+  }));
+  /**
+   * Structured state for the hands-on modes.
+   *
+   * Deliberately gives the driver the *materials* and not the answer: how many slots the tray has
+   * and which are filled, where the blank sits on the rail, what is written on each cake. The
+   * driver then does the arithmetic itself, exactly as a child has to. Reading an \`answer\`
+   * attribute off the DOM would produce a harness that passes every mode without ever proving one
+   * of them is solvable.
+   */
+  const modeState = (() => {
+    if (mode === 'tray') {
+      const b = q('.tray__board');
+      if (!b) return null;
+      return {
+        capacity: +b.dataset.capacity,
+        filled: +(b.dataset.filled || 0),
+        slots: [...document.querySelectorAll('.tray__slot')].map((n) => ({
+          index: +n.dataset.index,
+          filled: n.dataset.filled === '1',
+          locked: n.disabled,
+        })),
+        readout: txt('.tray__count'),
+      };
+    }
+    if (mode === 'rail') {
+      const tr = q('.rail__track');
+      if (!tr) return null;
+      return {
+        step: +tr.dataset.step,
+        counting: tr.classList.contains('rail__track--count'),
+        stops: [...document.querySelectorAll('.rail__stop')].map((n) => ({
+          hop: +n.dataset.hop,
+          value: n.dataset.value === '' ? null : +n.dataset.value,
+          blank: n.classList.contains('is-blank'),
+          target: n.classList.contains('is-target'),
+          start: n.classList.contains('is-start'),
+        })),
+      };
+    }
+    if (mode === 'plates') {
+      const pile = q('.plates__pile');
+      const row = q('.plates__row');
+      if (!pile || !row) return null;
+      return {
+        remaining: +(pile.dataset.remaining || 0),
+        plates: +row.dataset.plates,
+        counts: [...document.querySelectorAll('.plates__plate')].map((n) => +n.dataset.count),
+        question: txt('.plates__question'),
+      };
+    }
+    if (mode === 'slice') {
+      const board = q('.slice__board');
+      if (!board) return null;
+      const cakes = [...document.querySelectorAll('.slice__cake')];
+      return {
+        wholes: +board.dataset.wholes,
+        cut: cakes.map((n) => n.dataset.cut === '1'),
+        parts: cakes.length ? +cakes[0].dataset.parts : null,
+        tally: txt('.slice__tally'),
+      };
+    }
+    if (mode === 'burnt') {
+      return {
+        cakes: [...document.querySelectorAll('.burnt__cake')].map((n) => ({
+          index: +n.dataset.index,
+          sum: (n.querySelector('.burnt__sum') || {}).textContent || '',
+          disabled: !!n.disabled,
+        })),
+      };
+    }
+    return null;
+  })();
   return {
     screen,
+    mode,
+    modeState,
+    chips,
+    hasReady: !!q('.modeReady'),
+    stale: !!(q('.lesson__stale') && !q('.lesson__stale').hidden),
+    ticket: txt('.ticket__body'),
     prompt: txt('.lesson__prompt'),
     recipe: txt('.lesson__recipe'),
     sub: txt('.lesson__sub'),
@@ -314,6 +399,260 @@ async function typeAnswer(value, { submit = true } = {}) {
   }
   if (submit) await tap(".key", "✓", { optional: true });
   return true;
+}
+
+// ------------------------------------------------------------------ hands-on modes
+
+/** Click the nth element matching a selector. Returns false if there is no nth element. */
+async function tapNth(selector, n) {
+  return evaluate(`(() => {
+    const ns = [...document.querySelectorAll(${JSON.stringify(selector)})];
+    if (!ns[${n}]) return false;
+    ns[${n}].click();
+    return true;
+  })()`);
+}
+
+/** Tap the chip showing a given number. */
+async function tapChip(value) {
+  return evaluate(`(() => {
+    const n = [...document.querySelectorAll('.chip')].find((x) => (x.textContent || '').trim() === ${JSON.stringify(String(value))});
+    if (!n || n.disabled) return false;
+    n.click();
+    return true;
+  })()`);
+}
+
+/** Evaluate "6 × 4 = 24" and say whether it is true. Mirrors what the child has to check. */
+function sumIsRight(text) {
+  const t = String(text).replace(/\u2212/g, "-");
+  const m = t.match(/(\d+)\s*([+\-\u00d7\u00f7])\s*(\d+)\s*=\s*(\d+)/);
+  if (!m) return null;
+  const [a, op, b, r] = [+m[1], m[2], +m[3], +m[4]];
+  const v = op === "+" ? a + b : op === "-" ? a - b : op === "\u00d7" ? a * b : a / b;
+  return v === r;
+}
+
+/**
+ * Play one hands-on question the way a child would: manipulate the props, then commit.
+ *
+ * Returns `{ answered, correct, said, expected }`, or null if the mode could not be read — which
+ * is itself reported as an issue, because a question a driver cannot even parse is a question a
+ * child cannot see the shape of either.
+ *
+ * Mistakes are made *in the material*, not in a final number: a slip on the tray means putting one
+ * bun too many on, a slip on the plates means dealing unevenly. That is the whole reason these
+ * modes exist, so it is the only honest way to test them.
+ */
+async function playMode(s, { slip }) {
+  const m = s.modeState;
+  if (!m) {
+    note("issue", `Mode "${s.mode}" rendered nothing the driver could read`, { prompt: s.prompt });
+    return null;
+  }
+
+  /**
+   * Has the lesson moved on while the child was still fiddling with the props?
+   *
+   * It legitimately can: after three misses Crumb gives the answer and moves on by himself. A
+   * driver that does not check this reports a stream of phantom "there was no tick to press" bugs
+   * against a feature that is working exactly as designed.
+   */
+  const startedOn = `${s.mode}|${s.prompt}`;
+  const movedOn = async () => {
+    const now = await read();
+    return `${now.mode}|${now.prompt}` !== startedOn;
+  };
+
+  switch (s.mode) {
+    case "tray": {
+      // Adding fills the tray to its capacity; taking away is stated in the prompt.
+      const take = /take\s+(\d+)\s+off/i.exec(s.prompt || "");
+      const expected = take ? m.capacity - +take[1] : m.capacity;
+      const want = slip ? Math.max(0, Math.min(m.capacity, expected + pick([-1, 1]))) : expected;
+      note("play", `${s.prompt} → builds ${want}${slip ? " (miscount)" : ""} of ${m.capacity}`);
+
+      // One tap per bun, at the edge of the tray, with a child's pauses.
+      let guard = 0;
+      for (;;) {
+        const now = (await read()).modeState;
+        if (!now || now.filled === want || guard++ > 40) break;
+        const i = now.filled > want ? now.filled - 1 : now.filled;
+        if (!(await tapNth(".tray__slot", i))) break;
+        await sleep(rand(120, 380));
+      }
+      await sleep(rand(200, 700));
+      if (!(await tap(".modeReady", null, { optional: true }))) {
+        if (await movedOn()) return null;
+        note("issue", "The tray had no way to say it was ready");
+        return null;
+      }
+      return { answered: true, correct: want === expected, said: want, expected };
+    }
+
+    case "rail": {
+      if (m.counting) {
+        // A number line. The child reads the prompt, finds the stop Crumb is on, and counts on or
+        // back. The driver does the same arithmetic from the *prompt text*, never from the DOM, so
+        // a rail that draws the wrong stops is caught rather than silently followed.
+        const hop = /on\s+(\d+)\.\s*He hops (back|on)\s+(\w+)/i.exec(s.prompt || "");
+        if (!hop) {
+          note("issue", "The counting rail's prompt did not say where Crumb starts", { prompt: s.prompt });
+          return null;
+        }
+        const WORDS = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5 };
+        const jumps = WORDS[hop[3].toLowerCase()] ?? Number(hop[3]);
+        if (!Number.isFinite(jumps)) {
+          note("issue", "The counting rail did not say how many hops", { prompt: s.prompt });
+          return null;
+        }
+        const from = +hop[1];
+        const expected = hop[2].toLowerCase() === "back" ? from - jumps : from + jumps;
+        const values = m.stops.map((x) => x.value);
+        const marked = m.stops.find((x) => x.start);
+        if (!marked || marked.value !== from) {
+          note("issue", "The counting rail did not mark the stop Crumb starts on", {
+            prompt: s.prompt,
+            start: marked ? marked.value : null,
+            stops: values,
+          });
+          return null;
+        }
+        if (!values.includes(expected)) {
+          note("issue", "The stop Crumb lands on was not on the rail", { expected, stops: values, prompt: s.prompt });
+          return null;
+        }
+        const near = values.filter((v) => v !== expected && Math.abs(v - expected) <= 2);
+        const said = slip && near.length ? pick(near) : expected;
+        note("play", `${s.prompt} → taps ${said}${said === expected ? "" : " (off by one)"}`);
+        await sleep(rand(250, 700));
+        const idx = values.indexOf(said);
+        if (!(await tapNth(".rail__stop--pick", idx))) {
+          if (await movedOn()) return null;
+          note("issue", "The counting rail's stops could not be tapped", { said, stops: values });
+          return null;
+        }
+        return { answered: true, correct: said === expected, said, expected };
+      }
+      const blank = m.stops.find((x) => x.blank);
+      const target = m.stops.find((x) => x.target);
+      const expected = blank ? blank.hop * m.step : target ? target.hop : null;
+      if (expected == null) {
+        note("issue", "The rail had neither a blank nor a target to aim at", { stops: m.stops });
+        return null;
+      }
+      // Assertion: the blank must never be the leftmost stop. A child counts on from what they can
+      // see, and a rail that opens with a question mark gives them nothing to count from.
+      if (blank && m.stops[0] && m.stops[0].hop === blank.hop) {
+        note("issue", "The rail's blank is its first stop — nothing to count on from", { stops: m.stops });
+      }
+      const options = s.chips.map((c) => c.value).filter((v) => Number.isFinite(v));
+      if (!options.includes(expected)) {
+        note("issue", "The rail's answer was not among the chips", { expected, options });
+        return null;
+      }
+      const said = slip ? pick(options.filter((v) => v !== expected)) ?? expected : expected;
+      note("play", `${s.prompt} → ${said}${slip ? " (wrong chip)" : ""}`);
+      await sleep(rand(200, 600));
+      if (!(await tapChip(said))) return null;
+      return { answered: true, correct: said === expected, said, expected };
+    }
+
+    case "plates": {
+      const total = m.remaining + m.counts.reduce((a, b) => a + b, 0);
+      const expected = Math.round(total / m.plates);
+      // Deal round-robin, which is what "one for you, one for you" looks like. A slipping child
+      // dumps two on the same plate somewhere in the middle.
+      let i = 0;
+      let guard = 0;
+      let dumped = false;
+      for (;;) {
+        const now = (await read()).modeState;
+        if (!now || now.remaining <= 0 || guard++ > 60) break;
+        let at = i % m.plates;
+        if (slip && !dumped && now.remaining === Math.floor(total / 2)) {
+          at = (i + 1) % m.plates;
+          dumped = true;
+        }
+        if (!(await tapNth(".plates__plate", at))) break;
+        i++;
+        await sleep(rand(110, 300));
+      }
+      await sleep(rand(300, 800));
+      const after = await read();
+      const options = after.chips.map((c) => c.value).filter((v) => Number.isFinite(v));
+      if (options.length === 0) {
+        note("issue", "Dealing every treat out did not bring up the answer chips", {
+          prompt: s.prompt,
+          state: after.modeState,
+        });
+        return null;
+      }
+      const said = slip && Math.random() < 0.5
+        ? pick(options.filter((v) => v !== expected)) ?? expected
+        : expected;
+      note("play", `${s.prompt} → ${said} each${said !== expected ? " (wrong)" : ""}`);
+      if (!(await tapChip(said))) return null;
+      return { answered: true, correct: said === expected, said, expected };
+    }
+
+    case "slice": {
+      for (let i = 0; i < m.wholes; i++) {
+        const now = (await read()).modeState;
+        if (!now) break;
+        const next = now.cut.findIndex((c) => !c);
+        if (next < 0) break;
+        await tapNth(".slice__cake", next);
+        await sleep(rand(220, 560));
+      }
+      await sleep(rand(300, 800));
+      const after = await read();
+      const per = after.modeState?.parts ?? m.parts;
+      const expected = m.wholes * per;
+      const options = after.chips.map((c) => c.value).filter((v) => Number.isFinite(v));
+      if (options.length === 0) {
+        note("issue", "Cutting every cake did not bring up the answer chips", {
+          prompt: s.prompt,
+          state: after.modeState,
+        });
+        return null;
+      }
+      if (!options.includes(expected)) {
+        note("issue", "The slice answer was not among the chips", { expected, options, per, wholes: m.wholes });
+        return null;
+      }
+      const said = slip ? pick(options.filter((v) => v !== expected)) ?? expected : expected;
+      note("play", `${s.prompt} → ${said} slices${slip ? " (wrong)" : ""}`);
+      if (!(await tapChip(said))) return null;
+      return { answered: true, correct: said === expected, said, expected };
+    }
+
+    case "burnt": {
+      const judged = m.cakes.map((c) => ({ ...c, right: sumIsRight(c.sum) }));
+      const unreadable = judged.filter((c) => c.right === null);
+      if (unreadable.length > 0) {
+        note("issue", "A cake's sum could not be read", { sums: m.cakes.map((c) => c.sum) });
+        return null;
+      }
+      const wrongOnes = judged.filter((c) => !c.right);
+      // Assertion: exactly one cake is burnt. Two would make the question unanswerable and none
+      // would make it a trick.
+      if (wrongOnes.length !== 1) {
+        note("issue", `${wrongOnes.length} of ${judged.length} cakes were wrong; exactly 1 expected`, {
+          sums: m.cakes.map((c) => c.sum),
+        });
+      }
+      const expected = wrongOnes[0]?.index ?? 0;
+      const said = slip ? pick(judged.filter((c) => c.index !== expected)).index : expected;
+      note("play", `${s.prompt} → taps "${judged.find((c) => c.index === said)?.sum}"${slip ? " (wrong)" : ""}`);
+      await sleep(rand(300, 900));
+      if (!(await tapNth(".burnt__cake", said))) return null;
+      return { answered: true, correct: said === expected, said, expected };
+    }
+
+    default:
+      return null;
+  }
 }
 
 // ------------------------------------------------------------------ misbehaviour
@@ -424,6 +763,8 @@ const lessonFacts = new Set();
 let lastFactKey = "";
 /** Once-only celebrations already seen, so a repeat is a bug rather than a nice surprise. */
 const celebrations = new Set();
+/** How many questions each mode asked. A mode that never appears is a mode that is not tested. */
+const modesSeen = new Map();
 let gapQuestions = 0;
 
 console.log(`\n▶ ${PERSONA.label}`);
@@ -575,12 +916,53 @@ for (let step = 0; step < 4000; step++) {
       break;
     }
     case "lesson": {
+      if (s.recipe) recipesSeen.add(s.recipe);
+      if (s.prompt) promptsSeen.add(s.prompt);
+
+      // A hands-on question has no equation to read, so it is played through the props instead.
+      if (s.mode && s.mode !== "keypad" && s.mode !== "ticket") {
+        if (lessonFacts.size === 0) await frame(`lesson-${s.mode}`);
+        const key = `${s.mode}:${s.prompt}:${JSON.stringify(s.modeState).slice(0, 120)}`;
+        if (key !== lastFactKey) {
+          lessonFacts.add(key);
+          lastFactKey = key;
+          modesSeen.set(s.mode, (modesSeen.get(s.mode) ?? 0) + 1);
+        }
+        if (PERSONA.cheats.length && Math.random() < 0.08) {
+          await misbehave(pick(PERSONA.cheats), s);
+          break;
+        }
+        await sleep(rand(PERSONA.thinkMs[0], PERSONA.thinkMs[1]));
+        const slip = Math.random() < PERSONA.slipRate;
+        const played = await playMode(s, { slip });
+        if (played) {
+          if (played.correct) questionsAnswered++;
+          else wrongAnswers++;
+          await sleep(1100);
+          if (!played.correct) {
+            const after = await read();
+            // Assertion: a wrong answer must leave the child on the same question, with help.
+            if (after.screen === "lesson" && after.mode === s.mode && after.prompt === s.prompt) {
+              // Same question, as it should be. A hint is expected somewhere on screen.
+              const helped = await evaluate(
+                `!!document.querySelector('.hint, .lesson__hint, .plates__question.is-nudge, .chip.is-out')`
+              );
+              if (!helped) {
+                note("issue", `A wrong ${s.mode} answer produced no hint of any kind`, { prompt: s.prompt });
+              }
+            }
+          }
+        } else {
+          // Unreadable or unplayable: do not wedge the run.
+          await sleep(600);
+        }
+        break;
+      }
+
       if (!s.fact) {
         await sleep(400);
         break;
       }
-      if (s.recipe) recipesSeen.add(s.recipe);
-      if (s.prompt) promptsSeen.add(s.prompt);
       equationsSeen.push(s.equation);
       if (s.frame === "gap") gapQuestions++;
 
@@ -600,6 +982,7 @@ for (let step = 0; step < 4000; step++) {
           }
           lessonFacts.add(key);
           lastFactKey = key;
+          modesSeen.set(s.mode, (modesSeen.get(s.mode) ?? 0) + 1);
           if (lessonFacts.size === 1) await frame("lesson");
         }
       }
@@ -627,7 +1010,7 @@ for (let step = 0; step < 4000; step++) {
         if (after.prompt === s.prompt && after.prompt === "Find the missing number") {
           note("issue", "A wrong answer produced no hint and no change of prompt");
         }
-        if (after.fact && after.fact.answer !== s.fact.answer) {
+        if (after.fact && after.fact.answer !== s.fact.answer && !/^It was \d/.test(after.prompt || "")) {
           note("issue", "A wrong answer skipped to a different question", {
             was: s.equation,
             now: after.equation,
@@ -740,6 +1123,7 @@ const report = {
   recipesSeen: [...recipesSeen],
   distinctPrompts: [...promptsSeen],
   gapQuestions,
+  modesSeen: Object.fromEntries(modesSeen),
   celebrations: [...celebrations],
   saveBytes: final.saveBytes ?? null,
   mostRepeatedQuestions: mostRepeated,
@@ -763,6 +1147,7 @@ writeFileSync(join(OUT, "journal.json"), JSON.stringify(journal, null, 2));
 console.log(`\n─── ${PERSONA.label} ───`);
 console.log(`lessons ${lessonsPlayed}  questions ${questionsAnswered}  wrong ${wrongAnswers}`);
 console.log(`recipes seen: ${[...recipesSeen].join(", ") || "none"}`);
+console.log(`modes: ${[...modesSeen].map(([k, v]) => `${k}=${v}`).join("  ") || "none"}`);
 console.log(`chapter ${final.chapter}  completed ${final.completed}  baked ${final.factsBaked}`);
 console.log(`console errors ${consoleErrors.length}  exceptions ${exceptions.length}  issues ${issues.length}`);
 console.log(`frames ${frameNo} → ${OUT}`);

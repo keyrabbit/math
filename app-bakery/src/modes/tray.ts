@@ -124,6 +124,11 @@ export function trayMode(ctx: ModeContext): ModeInstance {
       ? `Start at ${f.a} and count on until the tray holds ${f.answer}.`
       : `Start at ${f.a} and count back: ${countBack(f.a, f.b)}.`,
     anchor: () => centreOf(lastTouched) ?? centreOf(board),
+    reveal: () => {
+      filled = target;
+      paint();
+      ready.disabled = true;
+    },
     retry: () => {
       // Put the tray back the way it was posed. A child who over-filled it cannot see their
       // mistake from a half-corrected tray, and re-counting from the start is the recovery a

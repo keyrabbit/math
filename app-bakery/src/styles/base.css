@@ -8,11 +8,21 @@
   box-sizing: border-box;
 }
 
+/* The `hidden` attribute only sets `display: none` at the user-agent level, so
+   any rule that gives an element its own `display` silently outranks it. That
+   is not a theoretical hazard: `ladder.hidden = true` on every hands-on
+   question left a sixteen-pixel ghost strip in the lesson body, and the prop
+   fitter — which works out its room by subtracting the siblings it can see —
+   handed five pixels of the tick to it. One rule, applied to everything,
+   because the next element to grow a `display` will not announce itself. */
+[hidden] {
+  display: none !important;
+}
+
 * {
   margin: 0;
   /* Kids drag on everything. Selection highlights look like bugs to them. */
-  -webkit-tap-highlight-color: transparent;
-}
+  -webkit-tap-highlight-color: transparent;}
 
 html,
 body,

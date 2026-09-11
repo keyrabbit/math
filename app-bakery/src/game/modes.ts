@@ -68,6 +68,15 @@ function fits(mode: ModeId, f: Fact, r: Recipe): boolean {
       // — the blank lands on the very first stop with nothing in front of it to count from, which
       // is a picture of a question rather than a question. The first screenshots showed exactly
       // that: a rail reading "? 10 15".
+      if (f.op === "add" || f.op === "sub") {
+        // The counting rail: a plain number line the child hops along. Small jumps only — counting
+        // on is a strategy for small addends, and a nine-hop journey on a phone-width track is a
+        // scrolling exercise rather than a counting one. Addition counts on from the larger part,
+        // so it is the *smaller* one that has to be short.
+        const jumps = f.op === "sub" ? f.b : Math.min(f.a, f.b);
+        return jumps >= 1 && jumps <= 5 && Math.min(f.a, f.answer) >= 0 && Math.max(f.a, f.answer) <= 20;
+      }
+      if (f.op !== "mul" && f.op !== "div") return false;
       return (f.op === "mul" ? f.b >= 3 : f.answer >= 3) && r.number >= 2;
     case "plates":
       // Dealing out. Needs few enough plates to fit across a phone and few enough treats per plate

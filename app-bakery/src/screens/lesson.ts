@@ -221,13 +221,15 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
 
     const inputBar = el("div", { class: "lesson__input" }, stagger(keypad));
 
+    const bodyEl = el("div", { class: "lesson__body" }, ticketHost, promptEl, staleTag, ladder, modeHost);
+
     const root = el(
       "div",
       { class: "lesson", dataset: { mode: "keypad" } },
       hud.element,
       skyEl,
       titleEl,
-      el("div", { class: "lesson__body" }, ticketHost, promptEl, staleTag, ladder, modeHost),
+      bodyEl,
       inputBar
     );
 
@@ -413,11 +415,52 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
      * the right-hand side — so the rail could hang 11px off each edge of a phone while the element
      * cheerfully reported that it fitted.
      */
+    /**
+     * How much height the props may use.
+     *
+     * Deliberately **not** `modeHost.clientHeight`. The host used to be `flex: 1`, which meant it
+     * swallowed every spare pixel; a four-stop number line was then centred inside a 721px void
+     * and came to rest at 68% down a tablet screen, with a lake of empty bakery between it and the
+     * question it answered. The host is now content-sized so the body can centre the prompt and
+     * the props together as one group — and the room is worked out instead, as whatever the body
+     * has left once its other children have taken their share.
+     */
+    function modeRoom(): number {
+      // Summed by hand rather than taken from `scrollHeight`, because `scrollHeight` clamps to
+      // `clientHeight` whenever the content fits — which makes the room come out as the host's own
+      // current height, and a search whose room depends on its own answer collapses to the
+      // minimum on the first pass.
+      //
+      // Margins are included deliberately. Leaving them out put the answer five to eleven pixels
+      // over on a landscape phone, which is exactly the band where the tick ends up below the fold.
+      const style = getComputedStyle(bodyEl);
+      const gap = parseFloat(style.rowGap) || 0;
+      const pad = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+      let used = 0;
+      let items = 0;
+      for (const child of Array.from(bodyEl.children) as HTMLElement[]) {
+        // Counted by *display*, not by height. An empty ticket host and a hidden stale badge are
+        // still flex items with no height — and flex still puts a gap either side of them. Judging
+        // by `offsetHeight` missed three gaps, which is how a landscape tray ended up with its
+        // tick five pixels below the fold while the fitter believed it had room to spare.
+        if (child.hidden || getComputedStyle(child).display === "none") continue;
+        items++;
+        if (child === modeHost) continue;
+        const cs = getComputedStyle(child);
+        used += child.offsetHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0);
+      }
+      return bodyEl.clientHeight - pad - used - gap * Math.max(0, items - 1);
+    }
+
     function fitMode(): void {
       if (!mode) return;
       const node = mode.element;
-      const roomH = modeHost.clientHeight;
+      const roomH = modeRoom();
       const roomW = modeHost.clientWidth;
+      // Left on the element on purpose: when a mode overflows, the first question is always
+      // "what did the fitter think it had to work with?", and without this the answer needs a
+      // debugger attached to a phone.
+      modeHost.dataset.room = String(Math.round(roomH));
       if (roomH <= 0 || roomW <= 0) return;
 
       /**
@@ -705,6 +748,31 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
         slotEl.dataset.status = "retry";
         modeHost.dataset.status = "retry";
         world.softMiss();
+
+        // Three misses and Crumb shows them.
+        //
+        // Before this, a question a child could not do was a question they stayed on forever: hint,
+        // retry, hint, retry, with no exit that a five-year-old would find. That is the point at
+        // which a tablet gets handed to an adult, and it is also the point at which the game stops
+        // being able to teach anything, because a stuck child is not reading the hint any more.
+        // The answer is simply given, nothing is earned for it, and the next question arrives. It
+        // is what a teacher does, and the spaced-repetition schedule has already recorded three
+        // misses, so the fact will come back soon and often.
+        if (misses >= 3) {
+          promptEl.textContent = `It was ${asked.expected}. Crumb will show you again soon.`;
+          staleTag.hidden = true;
+          world.crumb.setMood("encouraging");
+          audio.select();
+          if (mode) mode.reveal?.();
+          await wait(world.reducedMotion ? 700 : 1900);
+          delete slotEl.dataset.status;
+          delete modeHost.dataset.status;
+          entry = "";
+          locked = false;
+          nextQuestion();
+          return;
+        }
+
         // A hint, never a correction. The reference app was repeatedly criticised in reviews for
         // harsh wrong-answer copy; here a miss buys you a strategy you can act on. A mode's own
         // hint is about the thing in front of the child — "give one to every plate, then go round

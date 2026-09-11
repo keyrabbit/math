@@ -88,6 +88,13 @@ export function burntMode(ctx: ModeContext): ModeInstance {
     spoken: `Three cakes. ${cards.map((c) => written(c.fact, c.shown)).join(". ")}. Tap the one that is wrong.`,
     hint: `Work each one out yourself. ${factText(target, true)} — check that one.`,
     anchor: () => centreOf(picked) ?? centreOf(tray),
+    reveal: () => {
+      // Burn the right one in front of them, so the answer is the same event a correct tap would
+      // have produced rather than a sentence about it.
+      const node = tray.querySelector<HTMLElement>('.burnt__cake[data-burnt="1"]');
+      node?.classList.add("is-burnt");
+      for (const n of tray.querySelectorAll<HTMLButtonElement>(".burnt__cake")) n.disabled = true;
+    },
     retry: () => {
       picked = null;
     },
