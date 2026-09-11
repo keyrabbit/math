@@ -362,7 +362,7 @@
     padding: var(--sp-2) 0;
   }
   .ladder__row[data-role="active"] {
-    font-size: clamp(2rem, 6vw, 3rem);
+    font-size: calc(clamp(2rem, 6vw, 3rem) * var(--fit, 1));
   }
   .key {
     min-height: 46px;

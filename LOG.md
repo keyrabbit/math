@@ -504,3 +504,41 @@ There is still no shop — a shop needs browsing, confirming and regretting, non
 a five-year-old's maths game — but Crumb now spends them himself, in a fixed order, on the bakery:
 paper bunting, a brass lamp, a bakery cat, and on up to a gold shop sign. The counter became a
 countdown to a named thing, which is the part that was actually missing.
+### Three more runs, and the two bugs a text-reading robot cannot find
+
+Five runs of a driver that reads `textContent` will tell you everything about what the game *says*
+and nothing about what it *looks like*. Run six was the first one where I opened the frames instead
+of the report, and the very first fractions screenshot showed `1 whole = ▢ halves` running off both
+edges of a 393px phone at once. The child could see `whole = ▢ halve` and had to guess what was
+being asked. Five clean runs had gone past it, because the equation the driver read was perfect.
+
+The ladder sets `white-space: nowrap` — an equation broken across two lines stops reading as one
+thing — and a font size in `rem`. That is right for `7 + 5 = ▢` and wrong the moment a word appears
+in the equation, which is the entire point of the fractions chapter. The lesson now measures each
+row against the card and scales it down if it does not fit. The first attempt used `scrollWidth`,
+which reports nothing when a centred `nowrap` flex row overflows in both directions, so the fix
+silently did nothing; the working version measures the row's own box while it is unconstrained.
+`tools/fitcheck.mjs` renders all 712 equations the game can produce at eight device sizes and
+measures every one: 48 of them need shrinking on a phone, and after the fit, none overflow.
+
+The second bug came out of the run-six report rather than its pictures. The lesson used to submit
+as soon as the entry had as many digits as the answer, so that a child who forgot the tick was not
+stranded. For `4 ÷ 4 = ▢` a child aiming at 11 had the leading `1` taken from them at 180ms — and
+marked correct. The game told a child they were right when they were not, and wrote that into the
+record the parent report is built from. The trigger is now a pause rather than a digit count:
+nothing is submitted while the child is still typing. The wait is 900ms once the entry is already
+long enough to be an answer and 1600ms while it is not, because a pause then means "still hunting
+for the next key". `tools/autosubmit-check.mjs` plays both halves — the rescue still works, and a
+two-digit wrong answer is no longer scored on its first digit.
+
+Two of run six's other complaints were the harness lying about the game. `lessonFacts` was only
+cleared at a summary, so a lesson abandoned by a mid-lesson reload carried its questions into the
+next one and the driver accused the game of repeating itself; and the empty-submit probe fired
+during the reward animation of a lesson's last answer and blamed the tick for the summary that
+followed. Both are fixed in the driver, which matters: an instrument that cries wolf is worse than
+no instrument, because the real overflow bug was sitting in the same report.
+
+Run eight — a ninth-birthday completionist, 75 lessons, 584 questions, 393x852 — finished the game
+with every recipe baked, every one of the 356 facts learned, and zero issues, zero console errors
+and zero exceptions. Run seven, a cautious five-year-old over 20 lessons, the same. Both iOS
+simulators build, launch and persist.

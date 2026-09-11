@@ -72,6 +72,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
     let streak = 0;
     let bestStreak = 0;
     let locked = false;
+    let autoSubmit: ReturnType<typeof setTimeout> | undefined;
     const attempts: Attempt[] = [];
     /** Facts resolved this lesson, newest last — drives the "done" rows of the recipe card. */
     const solved: Fact[] = [];
@@ -174,11 +175,38 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
           )
         );
       }
+      fitLadder();
+    }
+
+    /**
+     * Shrink any row that is wider than the card.
+     *
+     * The ladder sets `white-space: nowrap` — an equation broken across two lines stops looking
+     * like one thing — and a font size in `rem`. That is safe for `7 + 5 = ▢` and wrong for
+     * `1 whole = ▢ halves`, which on a 393px phone ran off *both* edges at once: the child could
+     * see `whole = ▢ halve` and had to guess what the question was. Words in the equation are
+     * what the fractions chapter is for, so the fix belongs here rather than in the wording.
+     *
+     * Every contributor to a row's width is in `em` (the gaps, the slot's `min-width`), so width
+     * is linear in font size and one measured pass is enough — no binary search, no reflow loop.
+     */
+    function fitLadder(): void {
+      const avail = ladder.clientWidth - 16;
+      if (avail <= 0) return;
+      for (const row of Array.from(ladder.children) as HTMLElement[]) {
+        // Measure unscaled. A centred `nowrap` flex row overflows in both directions at once and
+        // `scrollWidth` does not report that, so the natural width has to come from the row's own
+        // box — which is why the row must not be width-constrained in CSS.
+        row.style.removeProperty("--fit");
+        const want = row.getBoundingClientRect().width;
+        row.style.setProperty("--fit", want > avail ? String(avail / want) : "1");
+      }
     }
 
     function updateSlot(): void {
       slotEl.textContent = entry || "";
       slotEl.dataset.empty = entry ? "0" : "1";
+      fitLadder();
     }
 
     // ---------------------------------------------------------------- flow
@@ -246,6 +274,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
     }
 
     function nextQuestion(): void {
+      clearTimeout(autoSubmit);
       const fact = mastery.nextFact(recipe, Date.now(), askedThisLesson);
       if (!fact) {
         void finish();
@@ -307,13 +336,34 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
       entry += d;
       audio.key(entry.length - 1);
       updateSlot();
-      // Auto-check once the entry can't usefully get any longer. Children of this age routinely
-      // forget to press "check"; waiting for it turns a right answer into a dead end. Only
-      // auto-submit when the digit count matches the answer's, so a two-digit answer is never cut
-      // off mid-entry.
-      if (current && entry.length === String(current.expected).length) {
-        setTimeout(() => void onSubmit(), 180);
+      armAutoSubmit();
+    }
+
+    /**
+     * Check the answer for a child who forgot to press the tick.
+     *
+     * Children of this age routinely forget the check button, and waiting for it turns a right
+     * answer into a dead end — so the game submits for them. The obvious rule, "submit as soon as
+     * the entry has as many digits as the answer", is wrong in a way that only shows up in a
+     * playtest: for `4 ÷ 4 = ▢` a child aiming at 11 gets the first `1` submitted *and marked
+     * correct* before the second key lands. The game then tells a child they were right when they
+     * were not, and writes that into the record the parent report is built from.
+     *
+     * So the trigger is a pause, not a digit count. Nothing is submitted while the child is still
+     * typing, and nothing a child types can be scored before they have finished typing it. The
+     * wait is shorter once the entry is already long enough to be an answer, because then the
+     * pause most likely means "done" rather than "still hunting for the next key".
+     */
+    function armAutoSubmit(): void {
+      clearTimeout(autoSubmit);
+      if (!current || entry === "") return;
+      // Three digits is the cap: it cannot grow, so there is nothing to wait for.
+      if (entry.length >= 3) {
+        autoSubmit = setTimeout(() => void onSubmit(), 180);
+        return;
       }
+      const enough = entry.length >= String(current.expected).length;
+      autoSubmit = setTimeout(() => void onSubmit(), enough ? 900 : 1600);
     }
 
     function onDelete(): void {
@@ -321,9 +371,11 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
       entry = entry.slice(0, -1);
       audio.tap();
       updateSlot();
+      armAutoSubmit();
     }
 
     async function onSubmit(): Promise<void> {
+      clearTimeout(autoSubmit);
       if (locked || !current || entry === "") return;
       locked = true;
       const asked = current;
@@ -445,6 +497,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
 
     let removeLayer: (() => void) | null = null;
     let removeTick: (() => void) | null = null;
+    let fitObserver: ResizeObserver | null = null;
 
     function onKeyDown(e: KeyboardEvent): void {
       if (e.key >= "0" && e.key <= "9") onDigit(e.key);
@@ -463,6 +516,11 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
         hud.registerSprinkleTarget();
         nextQuestion();
         window.addEventListener("keydown", onKeyDown);
+        // Rotating the device, or the display font arriving late, both change how much the
+        // equation needs. Re-measure rather than trusting the width we had at first paint.
+        fitObserver = new ResizeObserver(() => fitLadder());
+        fitObserver.observe(ladder);
+        void document.fonts?.ready.then(() => fitLadder());
 
         removeLayer = world.stage.add((c) => {
           world.shelf.update(c.dt);
@@ -482,6 +540,8 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
       },
       destroy() {
         window.removeEventListener("keydown", onKeyDown);
+        clearTimeout(autoSubmit);
+        fitObserver?.disconnect();
         removeLayer?.();
         removeTick?.();
         store.recordPlaytime();

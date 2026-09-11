@@ -326,8 +326,11 @@ async function misbehave(kind, state) {
       {
         const now = await read();
         // Only a question that is actually on screen can be "empty submitted"; a lesson that has
-        // just ended on its own is not the game losing an argument.
+        // just ended on its own is not the game losing an argument. The last question of a lesson
+        // is excluded for the same reason: the tick is pressed during the 620ms reward animation,
+        // and the summary that follows is the lesson ending, not the empty submit working.
         if (now.screen !== "lesson" || !now.fact) break;
+        if ((now.segments || []).filter((s) => s === 0).length <= 1) break;
         await tap(".key", "✓", { optional: true });
         await sleep(400);
         const after = await read();
@@ -484,6 +487,14 @@ for (let step = 0; step < 4000; step++) {
     lastSignature = signature;
   }
 
+  // A lesson that is left without a summary — reloaded, or backed out of — is abandoned, and the
+  // next one starts a fresh list of facts. Without this the duplicate-fact assertion carries the
+  // abandoned lesson's questions forward and accuses the game of repeating itself.
+  if (s.screen !== "lesson" && s.screen !== "summary" && lessonFacts.size > 0) {
+    lessonFacts.clear();
+    lastFactKey = "";
+  }
+
   switch (s.screen) {
     case "title":
       note("screen", "Title");
@@ -563,7 +574,6 @@ for (let step = 0; step < 4000; step++) {
       await sleep(1300);
       break;
     }
-
     case "lesson": {
       if (!s.fact) {
         await sleep(400);
