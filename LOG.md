@@ -433,3 +433,74 @@ rendered frame is not a working app. This one proves the corollary: **photograph
 child actually spends the session on, not the one the app happens to open on.** The title screen
 is the least informative screen in the product, and it is the one every automated pipeline
 reaches for.
+
+## 2026-09-12 — Playing it as a child, five times, until it stopped breaking
+
+The brief was to stop reviewing the game and start *playing* it: be a five-year-old, be a
+seven-year-old who wants to break things, make mistakes, guess, try to cheat, quit and come back,
+and keep going to the end. Then fix everything found, and do it again as a different child who
+knows nothing about the last one.
+
+The first decision was the instrument. The iPhone simulator is the truthful device but a slow
+loop; a local dev server driven over the Chrome DevTools Protocol plays a hundred lessons in the
+time the simulator plays five. `tools/playtest.mjs` is the result: three child personas with
+different think times, slip rates, guess rates and appetites for mischief, a catalogue of
+misbehaviour (empty submits, double submits, fists on the keypad, keyboard spam, back mid-lesson,
+reload mid-lesson, quit and return), frame capture, a journal, console/exception capture and
+stuck detection. The simulator went back to being what it is good at: the final look.
+
+**The biggest bug was found before the harness ran at all**, by reading the content model end to
+end and asking the dullest possible question: who writes `store.state.chapter`? Exactly one place,
+onboarding, and nothing ever advances it. Four of the five chapters and 314 of the game's 356
+facts could not be reached by playing. The game had no ending — and, worse, no middle.
+
+Then the runs.
+
+| Run | Child | What it proved |
+| --- | --- | --- |
+| 1 | Maya, 5, cautious | 9 findings. 26 repeats of `2 + 3 =` in ten minutes |
+| 2 | Theo, 7, breaks things | Progression works; the board recommends review nine times to four new recipes |
+| 3 | Ada, 9, wants to finish | Invalidated — see below |
+| 4 | Ada again | **The game can be finished**: 33 recipes, 356 facts, 0 errors |
+| 5 | Ada, final build | Verification past the ending |
+
+Run 1's headline finding was not a crash. Sugar Cookies — the first recipe every five-year-old
+meets — contains exactly four facts, and `LESSON_LENGTH` was a flat 8. So the first ninety seconds
+of the game asked each of four sums twice, back to back. That is the precise experience of "this
+is just clicking buttons", delivered before the child has decided whether they like it. Lesson
+length is now a cap, not a quota, and a second question *frame* was added: a fact the child has
+already baked can be asked as `3 + ▢ = 8` instead of `3 + 5 = ▢`. Missing-addend is the harder and
+more valuable form, it is what every Year 1 workbook actually asks, and it doubles the questions
+available from a four-fact recipe without inventing any content.
+
+Run 3 is the instructive failure. Halfway through it I edited the source; Vite hot-reloaded the
+running game, and the report came back with two `ReferenceError`s and a stuck lesson that were
+entirely my own. **Do not edit the app while a playtest is driving it.** The two "bugs" were
+artefacts; the run was thrown away and repeated.
+
+A subtler version of the same lesson: run 2's first four lessons were all *restocks* of shelves it
+had never filled. The harness "started fresh" by calling `localStorage.clear()` and navigating —
+but the outgoing page flushes its save on `pagehide`, so every cold open resurrected the previous
+child's progress. The fix is to park on `about:blank` first, clear the origin's storage from the
+browser side, and only then open the game. A harness that cannot actually start from nothing
+cannot test a first-time experience, and it will lie to you politely while it fails to.
+
+Run 4 got the answer the brief asked for: **the bakery can be finished** — 33 recipes, all 356
+facts, "The whole bakery is full. — The end", zero console errors and zero exceptions. And then it
+found the next bug by not stopping: the last eighty lessons were all The Big Party Cake, because
+the board's fallback when nothing is unfinished was "the last node on the list". Finishing a game
+should not turn it into a loop of one screen. The board now switches to a maintenance list ranked
+by what has been left longest.
+
+The honesty fixes matter as much as the bugs. The parent report counted a fact as "mastered" at
+box 1 — a *two-minute* hold — under the caption "Retained across a review a day or more later".
+That is the kind of number that makes a parent trust a product exactly once. Mastery now means box
+4, a fact that survived a night's sleep, and practice is reported separately. And The Party Room,
+the fractions chapter, rendered every question as `3 × 2 = 6`: multiplication wearing a fractions
+label, with the word "half" appearing nowhere on screen. It now reads `3 wholes = ▢ halves`.
+
+Sprinkles were the other lie. A ten-minute session earned 378 of them and they bought nothing.
+There is still no shop — a shop needs browsing, confirming and regretting, none of which belong in
+a five-year-old's maths game — but Crumb now spends them himself, in a fixed order, on the bakery:
+paper bunting, a brass lamp, a bakery cat, and on up to a gold shop sign. The counter became a
+countdown to a named thing, which is the part that was actually missing.

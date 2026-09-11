@@ -52,6 +52,29 @@ const HOLD_MINUTES = [0, 2, 10, 60, 60 * 24, 60 * 24 * 3, 60 * 24 * 7, 60 * 24 *
 export const SPECIAL_BOX = HOLD_MINUTES.length - 1;
 
 /**
+ * The first box whose interval is a day or more.
+ *
+ * This is the line between "got it right just now" and "still had it after a night's sleep", and
+ * it is the only one of the two a parent should ever be shown as *mastery*. The report previously
+ * captioned box-1 treats — a two-minute hold — as "retained across a review a day or more later",
+ * which is the kind of number that makes a parent trust a product once and never again.
+ */
+export const RETAINED_BOX = 4;
+
+/**
+ * The box from which a stale treat is worth *interrupting the story* for.
+ *
+ * The early holds are minutes long on purpose — that is how a fact gets its second and third look
+ * inside one sitting, and the lesson picker uses them. But the order board was using the same
+ * test, so two minutes after a child finished a shelf the board started telling them to go back
+ * and restock it, for ever. Sixteen lessons into a playtest the board had recommended a restock
+ * nine times and a new recipe four: a game that had stopped moving forwards.
+ *
+ * Box 3 is the one-hour hold. Above it, "gone stale" means the child has genuinely been away.
+ */
+export const RESTOCK_BOX = 3;
+
+/**
  * How long a treat takes to go from fresh down to its floor once its freshness runs out,
  * expressed as a **multiple of the hold it just lapsed** rather than a fixed duration.
  *
@@ -85,6 +108,8 @@ export interface RecipeProgress {
   special: number;
   /** Treats going stale and worth baking again. */
   stale: number;
+  /** Stale treats the child has genuinely been away from — see `RESTOCK_BOX`. */
+  due: number;
   total: number;
   ratio: number;
   /** Every treat baked — the shelf is full. */
@@ -178,20 +203,32 @@ export class Mastery {
     return this.get(id).box === 0;
   }
 
+  /** The most recent time any treat in this recipe was baked. 0 if it has never been opened. */
+  lastSeenIn(r: Recipe): number {
+    let last = 0;
+    for (const f of r.facts) last = Math.max(last, this.get(f.id).lastSeen);
+    return last;
+  }
+
   progress(r: Recipe, now = Date.now()): RecipeProgress {
     const total = r.facts.length;
     let baked = 0;
     let special = 0;
     let stale = 0;
+    let due = 0;
     for (const f of r.facts) {
       if (this.isBaked(f.id)) baked += 1;
       if (this.isSpecial(f.id)) special += 1;
-      if (this.isStale(f.id, now)) stale += 1;
+      if (this.isStale(f.id, now)) {
+        stale += 1;
+        if (this.get(f.id).box >= RESTOCK_BOX) due += 1;
+      }
     }
     return {
       baked,
       special,
       stale,
+      due,
       total,
       ratio: total === 0 ? 0 : baked / total,
       complete: baked === total && total > 0,
@@ -209,29 +246,33 @@ export class Mastery {
    *
    * Interleaving overdue review with new material is what makes practice stick; blocked practice
    * feels easier during the session and works worse afterwards.
+   *
+   * `avoid` is everything already asked in the current lesson. It is a hard exclusion until the
+   * recipe runs out of anything else: asking the same sum twice in one sitting while other facts
+   * in the same family sit unasked is the single most repetitive thing this game can do.
    */
-  nextFact(r: Recipe, now = Date.now(), avoid?: string): Fact | null {
-    const pool = r.facts.filter((f) => f.id !== avoid);
-    const candidates = pool.length > 0 ? pool : r.facts;
-    if (candidates.length === 0) return null;
+  nextFact(r: Recipe, now = Date.now(), avoid?: ReadonlySet<string> | string): Fact | null {
+    const exclude =
+      typeof avoid === "string" ? new Set([avoid]) : (avoid ?? new Set<string>());
+    const pool = r.facts.filter((f) => !exclude.has(f.id));
+    if (pool.length === 0) return null;
 
-    const stale = candidates
+    const stale = pool
       .filter((f) => this.isStale(f.id, now))
       .sort((a, b) => this.get(a.id).holdsUntil - this.get(b.id).holdsUntil);
     if (stale.length > 0) return stale[0];
 
-    const unlearned = candidates.filter((f) => this.isUnlearned(f.id));
+    const unlearned = pool.filter((f) => this.isUnlearned(f.id));
     if (unlearned.length > 0) return unlearned[0];
 
-    return candidates
-      .slice()
-      .sort((a, b) => this.get(a.id).lastSeen - this.get(b.id).lastSeen)[0];
+    return pool.slice().sort((a, b) => this.get(a.id).lastSeen - this.get(b.id).lastSeen)[0];
   }
 
   /** Overall figures for the parent report. */
   summary(now = Date.now()): {
     attempted: number;
     baked: number;
+    retained: number;
     special: number;
     stale: number;
     accuracy: number;
@@ -239,6 +280,7 @@ export class Mastery {
   } {
     let attempted = 0;
     let baked = 0;
+    let retained = 0;
     let special = 0;
     let stale = 0;
     let correct = 0;
@@ -247,13 +289,22 @@ export class Mastery {
     for (const [id, s] of this.facts.entries()) {
       if (s.seen > 0) attempted += 1;
       if (s.box >= 1) baked += 1;
+      if (s.box >= RETAINED_BOX) retained += 1;
       if (s.box >= SPECIAL_BOX) special += 1;
       if (this.isStale(id, now)) stale += 1;
       if (s.bestMs > 0 && s.bestMs <= FLUENT_MS) fluent += 1;
       correct += s.correct;
       seen += s.seen;
     }
-    return { attempted, baked, special, stale, accuracy: seen === 0 ? 0 : correct / seen, fluent };
+    return {
+      attempted,
+      baked,
+      retained,
+      special,
+      stale,
+      accuracy: seen === 0 ? 0 : correct / seen,
+      fluent,
+    };
   }
 
   /** The actionable half of the parent report. */
@@ -265,9 +316,18 @@ export class Mastery {
       .slice(0, limit);
   }
 
+  /**
+   * Only facts the child has actually touched are written.
+   *
+   * `get()` inserts on read, and drawing the board or the case reads every fact in the game, so
+   * after one session the save contained a row of zeroes for all 356 facts — about 40 KB of
+   * nothing, written on every flush, on a device where storage is a shared quota.
+   */
   toJSON(): Record<string, FactState> {
     const out: Record<string, FactState> = {};
-    for (const [k, v] of this.facts.entries()) out[k] = v;
+    for (const [k, v] of this.facts.entries()) {
+      if (v.seen > 0 || v.box > 0) out[k] = v;
+    }
     return out;
   }
 }

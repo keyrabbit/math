@@ -3,8 +3,9 @@ import { el, setChildren } from "../core/dom";
 import { ShelfView } from "../render/shelf";
 import { withAlpha } from "../render/stage";
 import type { ScreenInstance, World } from "../world";
-import { CHAPTERS, chapterRecipes, opSymbol, type Recipe } from "../game/curriculum";
+import { CHAPTERS, chapterRecipes, factText, type Recipe } from "../game/curriculum";
 import { store } from "../game/store";
+import { DECOR, nextDecor, unlockedDecor } from "../game/decor";
 import { makeMapScreen } from "./map";
 
 /**
@@ -44,7 +45,7 @@ export function makeCaseScreen(world: World): ScreenInstance {
           el("span", {
             class: "case__fact",
             dataset: { lit: mastery.isBaked(f.id) ? "1" : "0" },
-            textContent: `${f.a} ${opSymbol(f.op)} ${f.b} = ${f.answer}`,
+            textContent: factText(f, true),
           })
         )
       )
@@ -54,6 +55,53 @@ export function makeCaseScreen(world: World): ScreenInstance {
 
   const grid = el("div", { class: "case__grid" });
   const cells: { btn: HTMLButtonElement; recipe: Recipe }[] = [];
+
+  // Crumb's shelf — what the sprinkles bought, and what they are saving up for. Locked rows stay
+  // visible with their price on them: the anticipation is most of the reward.
+  const sprinkles = store.state.sprinkles;
+  const saving = nextDecor(sprinkles);
+  const decorStrip = el(
+    "div",
+    { class: "case__decor" },
+    el(
+      "h2",
+      { class: "case__chapter" },
+      "Crumb's shelf",
+      el("span", {
+        class: "case__chapterCount dim",
+        textContent: ` ${unlockedDecor(sprinkles).length}/${DECOR.length}`,
+      })
+    ),
+    el(
+      "div",
+      { class: "case__decorList" },
+      ...DECOR.map((d) => {
+        const got = sprinkles >= d.cost;
+        // The next one is named — that is the thing worth saving for. The ones after it stay a
+        // surprise, so the shelf never reads as a price list.
+        const teased = got || d.id === saving?.decor.id;
+        return el(
+          "div",
+          { class: "case__decorRow", dataset: { got: got ? "1" : "0" } },
+          el("span", { class: "case__decorName", textContent: teased ? d.name : "Something else" }),
+          el("span", {
+            class: "case__decorNote dim",
+            textContent: got ? d.line : `${d.cost - sprinkles} more sprinkles`,
+          })
+        );
+      })
+    ),
+    saving
+      ? el(
+          "div",
+          { class: "case__decorTrack", aria: { hidden: "true" } },
+          el("div", {
+            class: "case__decorFill",
+            style: { width: `${Math.round(saving.fill * 100)}%` },
+          })
+        )
+      : null
+  );
 
   for (const group of groups) {
     grid.appendChild(
@@ -128,7 +176,7 @@ export function makeCaseScreen(world: World): ScreenInstance {
             : `${completeTotal} recipe${completeTotal === 1 ? "" : "s"} finished. Nothing here is ever taken away.`,
       })
     ),
-    el("div", { class: "case__scroll grow" }, grid),
+    el("div", { class: "case__scroll grow" }, grid, decorStrip),
     detail
   );
 

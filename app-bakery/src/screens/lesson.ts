@@ -5,22 +5,34 @@ import type { ScreenInstance, World } from "../world";
 import {
   CHAPTERS,
   chapterRecipes,
-  factHint,
-  opName,
-  opSymbol,
+  askFact,
+  askedHint,
+  factText,
+  type AskedFact,
+  type FactFrame,
   type Recipe,
   type Fact,
 } from "../game/curriculum";
 import { store } from "../game/store";
+import { chapterIsComplete, gameIsComplete } from "../game/progress";
 import { Hud } from "./hud";
 import { makeMapScreen } from "./map";
 import { makeSummaryScreen } from "./summary";
 
-/** Facts answered per lesson. Short enough to finish in one sitting for a 5-year-old. */
-const LESSON_LENGTH = 8;
+/**
+ * Questions in one lesson.
+ *
+ * A cap, not a quota. The first recipe in the game — Sugar Cookies, "ways to make 5" — contains
+ * exactly four facts, and asking eight questions from it meant every child's first lesson put the
+ * same four sums up twice each, back to back. That is the precise experience of "this is just
+ * clicking buttons", delivered in the first ninety seconds. A lesson now never asks more distinct
+ * questions than the recipe actually has.
+ */
+const LESSON_MAX = 8;
 
 interface Attempt {
   fact: Fact;
+  frame: FactFrame;
   correct: boolean;
   ms: number;
 }
@@ -42,7 +54,18 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
     const chapter = CHAPTERS[store.state.chapter] ?? CHAPTERS[0];
     const mastery = store.mastery;
 
-    let current: Fact | null = null;
+    /**
+     * How many questions this lesson asks.
+     *
+     * Never more than the recipe has facts, so nothing is ever asked twice while something else
+     * is still unasked.
+     */
+    const lessonLength = Math.max(1, Math.min(LESSON_MAX, recipe.facts.length));
+
+    /** Sprinkles at the door, so the summary can tell what this lesson actually paid for. */
+    const sprinklesAtStart = store.state.sprinkles;
+
+    let current: AskedFact | null = null;
     let entry = "";
     let questionStart = performance.now();
     let answered = 0;
@@ -52,9 +75,11 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
     const attempts: Attempt[] = [];
     /** Facts resolved this lesson, newest last — drives the "done" rows of the recipe card. */
     const solved: Fact[] = [];
+    /** Everything already asked this lesson, so the picker never doubles back too early. */
+    const askedThisLesson = new Set<string>();
 
     const hud = new Hud(world, {
-      segments: LESSON_LENGTH,
+      segments: lessonLength,
       onBack: () => void world.go(makeMapScreen),
     });
 
@@ -116,7 +141,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
           el(
             "div",
             { class: "ladder__row", dataset: { role: "done" }, aria: { role: "listitem" } },
-            `${f.a} ${opSymbol(f.op)} ${f.b} = ${f.answer}`,
+            factText(f, true),
             el("span", { class: "ladder__tick", textContent: "✓" })
           )
         );
@@ -127,27 +152,25 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
             "div",
             {
               class: "ladder__row",
-              dataset: { role: "active" },
-              aria: {
-                role: "listitem",
-                label: `${current.a} ${opName(current.op)} ${current.b} equals what?`,
-              },
+              dataset: { role: "active", frame: current.frame },
+              aria: { role: "listitem", label: current.spoken },
             },
-            `${current.a} ${opSymbol(current.op)} ${current.b} =`,
-            slotEl
+            current.pre,
+            slotEl,
+            current.post
           )
         );
       }
       // Two greyed previews of what is coming, so the card reads as a continuing pattern.
       const upcoming = recipe.facts
-        .filter((f) => f.id !== current?.id && !solved.some((s) => s.id === f.id))
+        .filter((f) => f.id !== current?.fact.id && !solved.some((s) => s.id === f.id))
         .slice(0, 2);
       for (const f of upcoming) {
         ladder.appendChild(
           el(
             "div",
             { class: "ladder__row", dataset: { role: "upcoming" }, aria: { hidden: "true" } },
-            `${f.a} ${opSymbol(f.op)} ${f.b} =`
+            factText(f)
           )
         );
       }
@@ -223,19 +246,34 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
     }
 
     function nextQuestion(): void {
-      current = mastery.nextFact(recipe, Date.now(), current?.id);
+      const fact = mastery.nextFact(recipe, Date.now(), askedThisLesson);
+      if (!fact) {
+        void finish();
+        return;
+      }
+      askedThisLesson.add(fact.id);
+
+      // A fact the child has already baked can be asked the harder way. New material never is:
+      // nothing should be introduced in its most demanding form.
+      const state = mastery.get(fact.id);
+      const canGap = state.box >= 2 && fact.b !== fact.answer;
+      const frame: FactFrame = canGap && (state.seen + fact.a) % 2 === 0 ? "gap" : "direct";
+      current = askFact(fact, frame);
+
       entry = "";
       locked = false;
       questionStart = performance.now();
       renderLadder();
       updateSlot();
-      world.shelf.setActiveFact(factIndexOf(current?.id));
+      world.shelf.setActiveFact(factIndexOf(fact.id));
       // A stale treat is a *review*, and saying so out loud is what teaches the child that the case
       // needs restocking. Without this the dulling just looks like a bug.
-      const stale = !!current && mastery.isStale(current.id);
+      const stale = mastery.isStale(fact.id);
       promptEl.textContent = stale
         ? "This one's gone stale — bake it fresh"
-        : "Find the missing number";
+        : frame === "gap"
+          ? "How many more?"
+          : "Find the missing number";
       world.crumb.setMood("curious");
       setTimeout(() => world.crumb.setMood("idle"), 900);
 
@@ -252,6 +290,16 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
           "Bake it fresh"
         );
       }
+      // The first gap question is a new *kind* of question, not a new fact. Say so once.
+      if (frame === "gap" && store.markSeen("firstGap")) {
+        void showBeat(
+          [
+            "Now a trickier one.",
+            "This time the gap is in the middle. How many more do we need to get there?",
+          ],
+          "I can do that"
+        );
+      }
     }
 
     function onDigit(d: string): void {
@@ -263,7 +311,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
       // forget to press "check"; waiting for it turns a right answer into a dead end. Only
       // auto-submit when the digit count matches the answer's, so a two-digit answer is never cut
       // off mid-entry.
-      if (current && entry.length === String(current.answer).length) {
+      if (current && entry.length === String(current.expected).length) {
         setTimeout(() => void onSubmit(), 180);
       }
     }
@@ -278,14 +326,15 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
     async function onSubmit(): Promise<void> {
       if (locked || !current || entry === "") return;
       locked = true;
-      const fact = current;
-      const correct = Number(entry) === fact.answer;
+      const asked = current;
+      const fact = asked.fact;
+      const correct = Number(entry) === asked.expected;
       const ms = performance.now() - questionStart;
       const index = factIndexOf(fact.id);
       const wasBaked = mastery.isBaked(fact.id);
 
       mastery.record(fact.id, correct, ms);
-      attempts.push({ fact, correct, ms });
+      attempts.push({ fact, frame: asked.frame, correct, ms });
 
       const rect = slotEl.getBoundingClientRect();
       const cx = rect.left + rect.width / 2;
@@ -324,7 +373,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
         await wait(world.reducedMotion ? 200 : 620);
         delete slotEl.dataset.status;
 
-        if (answered >= LESSON_LENGTH) {
+        if (answered >= lessonLength) {
           void finish();
           return;
         }
@@ -335,7 +384,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
         world.softMiss();
         // A hint, never a correction. The reference app was repeatedly criticised in reviews for
         // harsh wrong-answer copy; here a miss buys you a strategy you can act on.
-        promptEl.textContent = factHint(fact);
+        promptEl.textContent = askedHint(asked);
         await wait(world.reducedMotion ? 260 : 620);
         delete slotEl.dataset.status;
         entry = "";
@@ -347,15 +396,29 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
     async function finish(): Promise<void> {
       store.recordPlaytime();
       const progress = mastery.progress(recipe);
-      if (progress.complete) {
-        store.markCompleted(recipe.key);
+      // "Finished" means finished *for the first time*. Re-baking a shelf that was already full is
+      // a good and necessary thing, but it is a restock, not an achievement, and firing the same
+      // fanfare for both is how praise stops meaning anything.
+      const firstCompletion = progress.complete && store.markCompleted(recipe.key);
+      const chapterFinished = firstCompletion && chapterIsComplete(chapter, mastery);
+      const gameFinished = chapterFinished && gameIsComplete(mastery);
+      if (firstCompletion) {
         audio.fanfare();
         world.crumb.setMood("proud");
       }
       store.flush();
       await wait(300);
       void world.go(
-        makeSummaryScreen({ recipe, attempts, bestStreak, completed: progress.complete })
+        makeSummaryScreen({
+          recipe,
+          attempts,
+          bestStreak,
+          completed: progress.complete,
+          firstCompletion,
+          chapterFinished: chapterFinished ? chapter : null,
+          gameFinished,
+          sprinklesAtStart,
+        })
       );
     }
 

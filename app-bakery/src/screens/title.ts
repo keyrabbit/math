@@ -4,8 +4,11 @@ import { ticker } from "../core/ticker";
 import { glow, withAlpha } from "../render/stage";
 import type { ScreenInstance, World } from "../world";
 import { store } from "../game/store";
+import { CHAPTERS } from "../game/curriculum";
+import { recommendedRecipe, nextChapterIndex, enterChapter } from "../game/progress";
 import { makeOnboardingScreen } from "./onboarding";
 import { makeMapScreen } from "./map";
+import { makeLessonScreen } from "./lesson";
 
 /**
  * Title screen.
@@ -13,22 +16,56 @@ import { makeMapScreen } from "./map";
  * Held to one rule: the child should want to touch the screen before they have read a word. Crumb
  * is already alive and already looking at them; the only control is a single primary button. There
  * is no settings gear, no login, no "rate us", no consent modal on first frame.
+ *
+ * For a returning child that button goes *straight into the next thing to bake*, named on the
+ * button itself. Landing on the title and then having to find your way through the board to the
+ * same recipe the board was already recommending is three taps of admin before any maths happens,
+ * every single time the app is opened.
  */
 export function makeTitleScreen(world: World): ScreenInstance {
   const returning = store.state.onboarded;
+  // If the room the child left is finished, quietly move them on before naming the button, so a
+  // returning player is never offered a shelf that is already full.
+  if (returning) {
+    const here = CHAPTERS[store.state.chapter] ?? CHAPTERS[0];
+    const target = recommendedRecipe(here, store.mastery);
+    if (!target || store.mastery.progress(target).complete) {
+      const next = nextChapterIndex(store.state.chapter, store.mastery);
+      if (next !== null && next !== store.state.chapter) enterChapter(next);
+    }
+  }
+  const chapter = CHAPTERS[store.state.chapter] ?? CHAPTERS[0];
+  const recipe = returning ? recommendedRecipe(chapter, store.mastery) : null;
 
   const play = el("button", {
     class: "btn btn--primary btn--large title__play",
     type: "button",
-    textContent: returning ? "Back to the bakery" : "Open the bakery",
+    textContent: !returning ? "Open the bakery" : recipe ? `Bake ${recipe.name}` : "Back to the bakery",
     on: {
       click: () => {
         audio.unlock();
         audio.select();
-        void world.go(returning ? makeMapScreen : makeOnboardingScreen);
+        if (!returning) void world.go(makeOnboardingScreen);
+        else if (recipe) void world.go(makeLessonScreen(recipe));
+        else void world.go(makeMapScreen);
       },
     },
   });
+
+  const board = returning
+    ? el("button", {
+        class: "btn btn--ghost title__board",
+        type: "button",
+        textContent: "The order board",
+        on: {
+          click: () => {
+            audio.unlock();
+            audio.select();
+            void world.go(makeMapScreen);
+          },
+        },
+      })
+    : null;
 
   const root = el(
     "div",
@@ -44,7 +81,8 @@ export function makeTitleScreen(world: World): ScreenInstance {
       })
     ),
     el("div", { class: "grow" }),
-    play
+    play,
+    board
   );
 
   let removeLayer: (() => void) | null = null;

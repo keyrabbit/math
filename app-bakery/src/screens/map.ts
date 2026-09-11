@@ -6,6 +6,7 @@ import { glow, withAlpha } from "../render/stage";
 import type { ScreenInstance, World } from "../world";
 import { CHAPTERS, chapterRecipes, type Recipe } from "../game/curriculum";
 import { store } from "../game/store";
+import { chapterIsComplete, unlockedChapters, enterChapter, leastRecent } from "../game/progress";
 import { makeLessonScreen } from "./lesson";
 import { makeCaseScreen } from "./case";
 import { makeParentsScreen } from "./parents";
@@ -41,7 +42,13 @@ export function makeMapScreen(world: World): ScreenInstance {
   const mastery = store.mastery;
 
   const found = recipes.findIndex((r) => !mastery.progress(r).complete);
-  const nextIndex = found < 0 ? recipes.length - 1 : found;
+  // When every shelf in the room is full there is no "next" — the board switches to keeping the
+  // bakery fresh, and the recipe left alone the longest is the one worth opening.
+  const chapterDone = found < 0;
+  const maintenance = chapterDone ? leastRecent(recipes, mastery) : null;
+  const nextIndex = chapterDone
+    ? Math.max(0, recipes.findIndex((r) => r === maintenance))
+    : found;
 
   /**
    * The first finished recipe with treats going stale, if any.
@@ -54,7 +61,7 @@ export function makeMapScreen(world: World): ScreenInstance {
    */
   const restockIndex = recipes.findIndex((r) => {
     const p = mastery.progress(r);
-    return p.complete && !p.allSpecial && p.stale > 0;
+    return p.complete && !p.allSpecial && p.due > 0;
   });
 
   const pathHeight = TOP_PAD + (recipes.length - 1) * NODE_SPACING + BOTTOM_PAD;
@@ -75,7 +82,7 @@ export function makeMapScreen(world: World): ScreenInstance {
     const isNext = i === nextIndex;
     const state = p.allSpecial
       ? "sealed"
-      : p.complete && p.stale > 0
+      : p.complete && p.due > 0
         ? "fading"
         : p.complete
           ? "complete"
@@ -88,7 +95,7 @@ export function makeMapScreen(world: World): ScreenInstance {
       dataset: { state },
       aria: {
         label: `${r.name}. ${r.subtitle}. ${p.baked} of ${p.total} treats baked.${
-          p.stale > 0 ? ` ${p.stale} going stale — worth baking again.` : ""
+          p.due > 0 ? ` ${p.due} going stale — worth baking again.` : ""
         }${isNext ? " Bake next." : ""}`,
       },
       on: {
@@ -111,7 +118,7 @@ export function makeMapScreen(world: World): ScreenInstance {
         el("span", {
           class: "mapnode__progress",
           textContent:
-            p.stale > 0 ? `${p.baked}/${p.total} · ${p.stale} stale` : `${p.baked}/${p.total}`,
+            p.due > 0 ? `${p.baked}/${p.total} · ${p.due} stale` : `${p.baked}/${p.total}`,
         })
       )
     );
@@ -134,9 +141,11 @@ export function makeMapScreen(world: World): ScreenInstance {
       type: "button",
       textContent: restockTarget
         ? `Restock ${restockTarget.name}`
-        : playTarget
-          ? `Bake ${playTarget.name}`
-          : "Bake",
+        : chapterDone && playTarget
+          ? `Keep ${playTarget.name} fresh`
+          : playTarget
+            ? `Bake ${playTarget.name}`
+            : "Bake",
       on: {
         click: () => {
           audio.select();
@@ -171,6 +180,46 @@ export function makeMapScreen(world: World): ScreenInstance {
   const totalBaked = recipes.reduce((n, r) => n + mastery.progress(r).baked, 0);
   const totalTreats = recipes.reduce((n, r) => n + r.facts.length, 0);
 
+  /**
+   * The doors to the rooms already opened.
+   *
+   * Shown only once there is more than one, so a child's first hour is never cluttered with a
+   * navigation control that does nothing. Once the bakery has several rooms this is the only way
+   * back into an earlier one to restock it, and a chapter the child has finished is exactly where
+   * their oldest, stalest treats live.
+   */
+  const rooms = unlockedChapters();
+  const doors =
+    rooms.length > 1
+      ? el(
+          "div",
+          { class: "map__rooms", aria: { role: "tablist", label: "Rooms" } },
+          ...rooms.map((c) => {
+            const done = chapterIsComplete(c, mastery);
+            const here = c.index === chapterIndex;
+            return el("button", {
+              class: "map__room",
+              type: "button",
+              dataset: { state: here ? "here" : done ? "done" : "open" },
+              textContent: c.title.replace(/^The /, ""),
+              aria: {
+                role: "tab",
+                selected: here ? "true" : "false",
+                label: `${c.title}${done ? ", every shelf full" : ""}`,
+              },
+              on: {
+                click: () => {
+                  if (here) return;
+                  audio.select();
+                  enterChapter(c.index);
+                  void world.go(makeMapScreen);
+                },
+              },
+            });
+          })
+        )
+      : null;
+
   const root = el(
     "div",
     { class: "map" },
@@ -182,7 +231,12 @@ export function makeMapScreen(world: World): ScreenInstance {
         { class: "map__titles" },
         el("p", { class: "prompt", textContent: `Chapter ${chapterIndex + 1}` }),
         el("h1", { class: "headline", textContent: chapter.title }),
-        el("p", { class: "map__subtitle dim", textContent: chapter.subtitle })
+        el("p", {
+          class: "map__subtitle dim",
+          textContent: chapterDone
+            ? `${chapter.subtitle} · every shelf full — now Crumb keeps them fresh`
+            : chapter.subtitle,
+        })
       ),
       el(
         "div",
@@ -194,6 +248,7 @@ export function makeMapScreen(world: World): ScreenInstance {
         el("span", { textContent: `${totalBaked}/${totalTreats}` })
       )
     ),
+    doors,
     scroller,
     stagger(buttons)
   );

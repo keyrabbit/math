@@ -3,3 +3,7 @@ dist/
 .vite/
 *.log
 .DS_Store
+
+# Playtest output: frames, journals and reports from tools/playtest.mjs. The harness is committed;
+# its evidence is regenerated on demand and would otherwise add megabytes of PNGs per run.
+.playtest/

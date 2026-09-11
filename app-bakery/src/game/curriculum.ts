@@ -166,6 +166,27 @@ const TRAY_NAMES: Record<number, string> = {
   10: "The Long Baguettes",
 };
 
+/**
+ * Separate names for the sharing chapter.
+ *
+ * The Bakehouse originally borrowed the tray names, so "The Three-Tier Stand" was both a
+ * three-times-table recipe in The Morning Market and a divide-by-three recipe two chapters later.
+ * A child who has already filled that shelf and is shown it again, empty, in a different room has
+ * every reason to think the game has lost their work — and the bakery case listed the same name
+ * twice with different contents.
+ */
+const SHARE_NAMES: Record<number, string> = {
+  2: "Two Plates Each",
+  3: "The Sharing Boxes",
+  4: "Four Little Bags",
+  5: "The Party Bags",
+  6: "Six Paper Cases",
+  7: "A Week of Buns",
+  8: "The Picnic Baskets",
+  9: "Nine Napkin Rolls",
+  10: "The Ten Tins",
+};
+
 export function opSymbol(op: Operation): string {
   // U+2212 MINUS SIGN, not a hyphen — a hyphen looks broken at display sizes.
   return { add: "+", sub: "−", mul: "×", div: "÷", frac: "×" }[op];
@@ -232,7 +253,7 @@ export function buildRecipe(kind: FamilyKind, n: number): Recipe {
           recipe: key,
         });
       }
-      name = TRAY_NAMES[n] ?? `Trays of ${n}`;
+      name = SHARE_NAMES[n] ?? `Sharing into ${n}s`;
       subtitle = `Sharing into ${n}s`;
       break;
     }
@@ -249,7 +270,7 @@ export function buildRecipe(kind: FamilyKind, n: number): Recipe {
         });
       }
       name = n === 2 ? "Halved Pies" : n === 3 ? "Cakes in Thirds" : "Quarter Slices";
-      subtitle = `How many ${unit} in each whole`;
+      subtitle = `Counting whole cakes in ${unit}`;
       break;
     }
   }
@@ -388,13 +409,34 @@ export function allRecipes(): Recipe[] {
   return CHAPTERS.flatMap(chapterRecipes);
 }
 
+/**
+ * The name of one slice, for the fractions chapter.
+ *
+ * The Party Room claims to teach fractions but rendered every question as `3 × 2 = 6`, which is
+ * multiplication wearing a fractions label: nothing on screen said "half", so the one idea the
+ * chapter exists to teach was the one thing it never showed. Writing it as "3 wholes = 6 halves"
+ * keeps the arithmetic identical and makes the question actually about halves.
+ */
+export function sliceName(n: number, count: number): string {
+  const one = n === 2 ? "half" : n === 3 ? "third" : n === 4 ? "quarter" : `${n}th`;
+  const many = n === 2 ? "halves" : n === 3 ? "thirds" : n === 4 ? "quarters" : `${n}ths`;
+  return count === 1 ? one : many;
+}
+
 /** Render a fact's left-hand side for display. */
 export function factText(f: Fact, withAnswer = false): string {
+  if (f.op === "frac") {
+    const lhs = `${f.a} ${f.a === 1 ? "whole" : "wholes"} =`;
+    return withAnswer ? `${lhs} ${f.answer} ${sliceName(f.b, f.answer)}` : lhs;
+  }
   const lhs = `${f.a} ${opSymbol(f.op)} ${f.b}`;
   return withAnswer ? `${lhs} = ${f.answer}` : `${lhs} =`;
 }
 
 export function factSpoken(f: Fact): string {
+  if (f.op === "frac") {
+    return `How many ${sliceName(f.b, 2)} are in ${f.a} ${f.a === 1 ? "whole" : "wholes"}?`;
+  }
   return `${f.a} ${opName(f.op)} ${f.b} equals what?`;
 }
 
@@ -410,6 +452,90 @@ export function factHint(f: Fact): string {
     case "div":
       return `How many ${f.b}s fit inside ${f.a}?`;
     default:
-      return `Count up in ${f.b}s, ${f.a} times.`;
+      return `One whole is ${f.b} ${sliceName(f.b, f.b)}. Count in ${f.b}s, once for each whole.`;
+  }
+}
+
+/**
+ * How a fact is *asked*.
+ *
+ * The same fact can be posed two ways, and they are not the same question:
+ *
+ *   direct    3 + 5 = ▢     "what do these make?"
+ *   gap       3 + ▢ = 8     "how many more do we need?"
+ *
+ * The second is the harder and more valuable one — missing-addend is the form that builds
+ * part–whole understanding, and it is the form that shows up as "3 + ? = 8" in every Year 1
+ * workbook. It also happens to be the cheapest possible cure for the thing that makes drill apps
+ * unbearable: a recipe with four facts stops being four questions and becomes eight, without
+ * inventing any new content or asking the child to learn anything new.
+ *
+ * The gap frame is only used on facts the child has already baked. New material is always shown
+ * the plain way, so nothing is ever introduced in its hardest form.
+ */
+export type FactFrame = "direct" | "gap";
+
+export interface AskedFact {
+  fact: Fact;
+  frame: FactFrame;
+  /** Text before the blank. */
+  pre: string;
+  /** Text after the blank. Empty for the direct frame. */
+  post: string;
+  /** The number the child has to type. */
+  expected: number;
+  /** Spoken form, for the screen reader. */
+  spoken: string;
+}
+
+export function askFact(f: Fact, frame: FactFrame): AskedFact {
+  const sym = opSymbol(f.op);
+  // Fractions are asked in slices, not in times signs — see `factText`. There is no sensible gap
+  // frame for "3 wholes = ▢ halves", so the chapter always uses the direct form.
+  if (f.op === "frac") {
+    return {
+      fact: f,
+      frame: "direct",
+      pre: `${f.a} ${f.a === 1 ? "whole" : "wholes"} = `,
+      post: ` ${sliceName(f.b, f.answer)}`,
+      expected: f.answer,
+      spoken: factSpoken(f),
+    };
+  }
+  if (frame === "gap") {
+    return {
+      fact: f,
+      frame,
+      pre: `${f.a} ${sym} `,
+      post: ` = ${f.answer}`,
+      expected: f.b,
+      spoken: `${f.a} ${opName(f.op)} what equals ${f.answer}?`,
+    };
+  }
+  return {
+    fact: f,
+    frame,
+    pre: `${f.a} ${sym} ${f.b} =`,
+    post: "",
+    expected: f.answer,
+    spoken: factSpoken(f),
+  };
+}
+
+/** The hint for a fact as it was actually asked. A gap question needs different advice. */
+export function askedHint(a: AskedFact): string {
+  if (a.frame !== "gap") return factHint(a.fact);
+  const f = a.fact;
+  switch (f.op) {
+    case "add":
+      return `Start at ${f.a} and count on until you reach ${f.answer}.`;
+    case "sub":
+      return `${f.a} take away what leaves ${f.answer}?`;
+    case "mul":
+      return `How many ${f.a}s do you need to make ${f.answer}?`;
+    case "div":
+      return `Share ${f.a} so that everyone gets ${f.answer}.`;
+    default:
+      return factHint(f);
   }
 }

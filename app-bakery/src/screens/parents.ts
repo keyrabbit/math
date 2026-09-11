@@ -2,7 +2,7 @@ import { audio } from "../core/audio";
 import { el, setChildren, stagger } from "../core/dom";
 import type { ScreenInstance, World } from "../world";
 import { FLUENT_MS } from "../game/mastery";
-import { allRecipes, opSymbol, type Operation } from "../game/curriculum";
+import { allRecipes, opSymbol, sliceName, type Operation } from "../game/curriculum";
 import { store } from "../game/store";
 import { makeMapScreen } from "./map";
 
@@ -110,11 +110,17 @@ export function makeParentsScreen(world: World): ScreenInstance {
           el(
             "div",
             { class: "parents__stats" },
+            /* Two numbers, honestly separated. "Facts mastered" used to report box >= 1 — a
+               two-minute hold — under the caption "Retained across a review a day or more
+               later", which was simply untrue and is exactly the kind of inflated claim that
+               makes a parent stop trusting a progress screen. Mastery now means the fact
+               survived at least a one-day gap; everything else is reported as practice. */
             statCard(
               "Facts mastered",
-              String(s.baked),
-              "Retained across a review a day or more later"
+              String(s.retained),
+              "Still correct after a day or more away"
             ),
+            statCard("Facts practised", `${s.baked}/${s.attempted}`, "Baked at least once"),
             statCard("Recipes", `${complete.length}/${recipes.length}`, "Complete fact families"),
             statCard("Accuracy", `${Math.round(s.accuracy * 100)}%`, "Across all attempts"),
             statCard(
@@ -280,6 +286,12 @@ function prettyFact(id: string): string {
   const [op, rest] = id.split(":") as [Operation, string];
   const m = rest.match(/^(\d+)(.)(\d+)$/);
   if (!m) return rest;
+  // Fraction facts are asked in slices, so a parent should see them the way their child does.
+  if (op === "frac") {
+    const a = Number(m[1]);
+    const n = Number(m[3]);
+    return `${a} ${a === 1 ? "whole" : "wholes"} in ${sliceName(n, 2)}`;
+  }
   return `${m[1]} ${opSymbol(op)} ${m[3]}`;
 }
 
