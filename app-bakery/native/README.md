@@ -281,6 +281,37 @@ Worth knowing when reading these results: **the app writes nothing until it is b
 played.** A fresh install parked on the title screen legitimately has an empty `LocalStorage`
 directory, so "no save file" on its own is not evidence of a storage fault.
 
+### A green deploy is not a working app
+
+Both gates above passed on a build whose lesson screen was unusable on a phone: the keypad
+covered the equation, and the recipe title sat on top of the solved facts. The gates only ever
+see the title screen, and the title screen was perfect.
+
+The cause was a layout that had been reasoned about rather than measured. Every lesson
+breakpoint in `src/styles/screens.css` was keyed on viewport *height* or on tablet *width*, so a
+modern tall phone — 393×852 — matched none of them and inherited the base layout, which reserves
+26vh for the shelf band and 306px for the keypad. That leaves the ladder 166px to do 200px of
+work, and because `.lesson__body` is a centred flex column the overflow goes in both directions
+at once: upwards over the title, downwards under the keypad. It only becomes visible after a
+couple of facts have been solved and the ladder has grown, which is why no screenshot caught it.
+
+Sweeping 23 viewports with a scripted measurement found the same class of fault in two more
+places that had never been looked at:
+
+| Viewport | Verdict |
+| --- | --- |
+| 393×852, 402×874, 430×932 | Phones fell through every breakpoint into the roomy base layout |
+| 1024×768, 1180×820, 1440×900 | Landscape tablets and laptops sat in the gap between `min-height: 900px` and `max-height: 700px` |
+| 768×1024 | The tablet rule fired 100px of height before its own keypad would fit |
+
+The repair is three new tiers plus `overflow: hidden` on `.lesson__body`, so that if a future
+change ever exceeds the space again the content is clipped rather than silently drawn on top of
+the keypad. All 23 viewports now leave the ladder at least 10px of headroom, and the phone case
+was confirmed on the iPhone 17 simulator **mid-lesson** — see
+`docs/shots-native/ios-iphone-17-lesson.png` — not at the title screen.
+
+The lesson for this pipeline: screenshot the screen the child actually spends the session on.
+
 ### Choices made in the Swift shell
 
 | Choice | Reason |
@@ -308,6 +339,7 @@ else about the shell needs to change. Tracked in issue #8.
 | --- | --- | --- |
 | Builds | ✅ | ✅ |
 | Launches and renders | ✅ API 30 emulator, 2560×1800 | ✅ iPhone 17 and iPad Air 11-inch (M4), iOS 26.5 |
+| Lesson screen fits the device | ✅ | ✅ iPhone 17, mid-lesson, two facts solved |
 | No console or runtime errors | ✅ | ✅ |
 | A whole recipe can be completed | ✅ scripted, on-device, 8 facts + summary | ⏳ rendering verified, not scripted |
 | `localStorage` survives app exit | ✅ real save data in LevelDB | ✅ `localstorage.sqlite3` for both devices |

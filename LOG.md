@@ -381,3 +381,55 @@ Generalisable, and the sharper version of the earlier lesson: *a screenshot prov
 rendered, not that an app works.* The two device-only bugs in this session both left the process
 alive, responsive and photogenic. Neither was reproducible in a desktop browser. If a web app is
 being shipped natively, something has to actually play it on the device.
+
+---
+
+## The third device-only bug, and the first one a screenshot could have caught
+
+The iOS pipeline ends with two gates: the screenshot has to be big enough to prove a real frame
+was drawn, and `localstorage.sqlite3` has to appear to prove the module ran. Both were green.
+Then the game was actually played on the iPhone simulator, and the lesson screen was unusable —
+the keypad covered the equation, and the recipe title sat on top of the solved facts. A child
+could not see the question they were being asked.
+
+The gates were not lying. They only ever look at the title screen, and the title screen was
+perfect. The fault needed two things to show up: a phone-shaped viewport, and a couple of facts
+already solved so the ladder had grown.
+
+The cause was a layout that had been reasoned about rather than measured. Every lesson
+breakpoint was keyed on viewport *height* (`max-height: 700px`, `560px`) or on tablet *width*
+(`min-width: 768px and min-height: 900px`). A modern tall phone at 393x852 matches none of them,
+so it inherited the base layout — which reserves 26vh for the shelf band and 306px for the
+keypad, leaving the ladder 166px to do 200px of work. And because `.lesson__body` is a centred
+flex column, the overflow goes *both* ways at once: up over the title, down under the keypad.
+
+Rather than nudge the CSS until the screenshot looked right, the fix started with an instrument:
+a Chrome DevTools Protocol driver that walks the app into a lesson at an emulated viewport,
+solves a few facts, and reports whether the active equation intersects the keypad or the title.
+Running it across 23 viewports turned one reported bug into three real ones:
+
+| Viewport | What the measurement said |
+| --- | --- |
+| 393x852, 402x874, 430x932 | Phones fall through every breakpoint into the roomy base layout |
+| 1024x768, 1180x820, 1440x900 | Landscape tablets and laptops sit in the gap between `min-height: 900px` and `max-height: 700px` — never considered at all |
+| 768x1024 | The tablet rule fires 100px of height before its own keypad fits |
+
+The last one is the most instructive. The tablet keypad sized its keys from the column width via
+`aspect-ratio`, so on a 1440x900 laptop it grew to 424px tall and pushed the equation off the
+screen. Height was the scarce axis and width was the one being measured. It now sizes from
+`7.4vh`.
+
+Two structural changes came out of it. Three new breakpoint tiers, and `overflow: hidden` on
+`.lesson__body` — so that if this ever happens again the question is clipped instead of being
+silently painted underneath a keypad. A visibly cut-off equation is a bug report; a hidden one is
+a child quietly failing.
+
+Confirmed the way it should have been in the first place: a throwaway build with an injected
+driver that plays two facts on the iPhone 17 simulator, then screenshots. Committed as
+`docs/shots-native/ios-iphone-17-lesson.png`.
+
+Three device-only bugs now, and the pattern has sharpened once more. The first two proved that a
+rendered frame is not a working app. This one proves the corollary: **photograph the screen the
+child actually spends the session on, not the one the app happens to open on.** The title screen
+is the least informative screen in the product, and it is the one every automated pipeline
+reaches for.

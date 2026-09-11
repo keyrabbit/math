@@ -242,6 +242,10 @@
   justify-content: center;
   min-height: 0;
   gap: var(--sp-1);
+  /* A centred flex column overflows in both directions at once, so content that does not fit
+     paints over the title above and the keypad below rather than being cut off. Clipping is the
+     lesser failure: a question half-hidden behind a keypad is unanswerable, and silent. */
+  overflow: hidden;
 }
 
 .lesson__prompt {
@@ -257,18 +261,23 @@
 
 /* Tablets. A phone-sized keypad on a 1024px screen looks like a stretched phone build,
    which is exactly the criticism levelled at most apps in this category. The controls
-   scale with the screen and the content column stays reading-width. */
-@media (min-width: 768px) and (min-height: 900px) {
+   scale with the screen and the content column stays reading-width.
+   The gate is on height, not just width, and the key size is driven by height rather than by
+   `aspect-ratio` off the column width: a keypad sized purely from width grows to 424px tall on a
+   1440x900 laptop and squeezes the equation out of the screen. Height is the scarce axis here,
+   so it is the one the controls are measured against. */
+@media (min-width: 768px) and (min-height: 1000px) {
   .lesson__shelf {
-    height: clamp(200px, 22vh, 300px);
+    height: clamp(150px, 19vh, 280px);
   }
   .keypad {
     width: min(460px, 56vw);
     gap: var(--sp-3);
   }
   .key {
-    min-height: 78px;
-    aspect-ratio: 1.5;
+    aspect-ratio: auto;
+    min-height: 0;
+    height: clamp(56px, 7.4vh, 92px);
     font-size: clamp(2rem, 3.4vw, 2.6rem);
   }
   .lesson__body {
@@ -282,6 +291,64 @@
 .ladder__tick {
   color: var(--positive);
   margin-left: 0.25em;
+}
+
+/* A phone held upright.
+   Every other breakpoint here is keyed on height or on tablet width, so a modern tall phone
+   (393x852) falls through all of them into the base layout — which is sized for a screen with
+   room to spare. It is not: the shelf band takes 26vh and the keypad 306px, leaving the ladder
+   less height than its rows need. And because `.lesson__body` centres its content, the overflow
+   spills *both* ways at once — the prompt lands on top of the recipe title while the equation
+   the child is answering slides behind the keypad. The screen looks fine until a couple of facts
+   have been solved, which is why a title-screen screenshot never showed it. */
+@media (max-width: 560px) and (min-height: 561px) {
+  .lesson__shelf {
+    height: clamp(96px, 15vh, 160px);
+  }
+  .lesson__title {
+    padding-bottom: 0;
+  }
+  .ladder {
+    gap: 0;
+    padding: var(--sp-2) 0;
+  }
+  .lesson__input {
+    padding-top: var(--sp-2);
+  }
+  .keypad {
+    width: min(300px, 78vw);
+    gap: var(--sp-1);
+  }
+  .key {
+    min-height: 44px;
+    aspect-ratio: 1.75;
+    font-size: var(--text-lg);
+  }
+}
+
+/* Wider than a phone, but not tall enough to earn the tablet layout.
+   A landscape tablet (1024x768, 1180x820) and a small laptop window land in the gap between the
+   tablet rule's `min-height: 900px` and the short-screen rules' `max-height: 700px`, and inherit
+   the roomy base layout for the second time. Same failure as the phone case, found the same way. */
+@media (min-width: 561px) and (min-height: 561px) and (max-height: 999px) {
+  .lesson__shelf {
+    height: clamp(96px, 14vh, 170px);
+  }
+  .ladder {
+    gap: 0;
+    padding: var(--sp-2) 0;
+  }
+  .lesson__input {
+    padding-top: var(--sp-2);
+  }
+  .keypad {
+    width: min(320px, 46vw);
+    gap: var(--sp-2);
+  }
+  .key {
+    min-height: 48px;
+    aspect-ratio: 1.8;
+  }
 }
 
 /* On short/landscape screens the shelf band and recipe card must both shrink,
@@ -300,6 +367,27 @@
   .key {
     min-height: 46px;
     aspect-ratio: 1.7;
+  }
+}
+
+/* A small phone upright — an SE at 320x568. Short enough that the block above still leaves the
+   ladder about 35px more than it has, tall enough that the landscape rules below never fire.
+   The preview of the next fact is what goes: it is the only thing on screen the child is not
+   being asked to read, and the shelf keeps the character visible. Declared after the rule above
+   so it wins the height overlap. */
+@media (max-width: 560px) and (min-height: 561px) and (max-height: 700px) {
+  .lesson__shelf {
+    height: clamp(80px, 13vh, 120px);
+  }
+  .ladder__row[data-role="upcoming"] {
+    display: none;
+  }
+  .lesson__prompt {
+    font-size: var(--text-xs);
+    min-height: 1.2em;
+  }
+  .keypad {
+    width: min(280px, 72vw);
   }
 }
 
