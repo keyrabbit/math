@@ -104,7 +104,7 @@ export function railMode(ctx: ModeContext): ModeInstance {
       : `Counting in ${step}s. Which number is missing?`,
     hint: dividing
       ? `Count the hops along the rail: ${series(step, hops)}.`
-      : `Keep adding ${step}: ${series(step, hops)}.`,
+      : `Keep adding ${step}: ${series(step, hops - 1)}, and one more hop.`,
     anchor: () => centreOf(picked) ?? centreOf(rail.querySelector(".is-blank, .is-target")),
     reveal: () => {
       // Fill the blank in and finish the sequence, so the whole rail is readable at once. The
@@ -218,7 +218,9 @@ function countingRail(ctx: ModeContext): ModeInstance {
     element,
     prompt: `Crumb is on ${start}. He hops ${way} ${count}. Where does he land?`,
     spoken: `Crumb is standing on ${start}. He takes ${count} ${hopWord} ${way}. Tap the stop he lands on.`,
-    hint: `Put your finger on ${start} and count ${count} ${hopWord} ${way}: ${countOut(start, jumps, back)}.`,
+    hint: back
+      ? `Put your finger on ${start} and move ${count} ${hopWord} to the left.`
+      : `Put your finger on ${start} and move ${count} ${hopWord} to the right.`,
     anchor: () => centreOf(picked) ?? centreOf(stopNodes.get(start) ?? null),
     reveal: () => {
       for (const node of stopNodes.values()) node.disabled = true;
@@ -234,11 +236,4 @@ function range(lo: number, hi: number): number[] {
   const out: number[] = [];
   for (let v = lo; v <= hi; v++) out.push(v);
   return out;
-}
-
-/** "4, 5, 6, 7, 8" — the count said out loud, which is the whole strategy. */
-function countOut(start: number, jumps: number, back: boolean): string {
-  const out: number[] = [];
-  for (let i = 1; i <= Math.min(jumps, 8); i++) out.push(back ? start - i : start + i);
-  return out.join(", ");
 }

@@ -146,7 +146,14 @@ export function pickMode(
 
   // 3. Learned but still bedding in. The symbolic forms, with the concrete one still available so
   //    a child who is shaky on a fact can see it built again rather than only tested.
-  const mode = choose(["keypad", "ticket", "keypad", "tray", "rail", "plates", "slice"]);
+  //
+  //    Judging burnt cakes joins the pool from box 2 — two clean answers — rather than waiting for
+  //    box 4. A seventy-lesson playtest that finished all thirty-three recipes and answered 556
+  //    questions never saw the mode once, because box 4 needs a night's sleep and nobody sleeps
+  //    inside a session. A mode that ships and is never shown is a mode that was not built.
+  const pool: ModeId[] = ["keypad", "ticket", "keypad", "tray", "rail", "plates", "slice"];
+  if (state.box >= 2) pool.push("burnt");
+  const mode = choose(pool);
   return { mode, allowGap: mode === "keypad" && state.box >= 2 };
 }
 

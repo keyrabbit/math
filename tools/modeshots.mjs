@@ -52,6 +52,11 @@ const CASES = [
   // game — up to eight tappable stops — so it is the one most likely to overflow a phone.
   { mode: "rail", recipe: "bond:9", box: 0, id: "rail-count" },
   { mode: "rail", recipe: "bond:20", box: 0, skip: 4, id: "rail-count-20" },
+  // The same two, after a wrong answer: the tick pressed on a half-filled tray, and the first
+  // stop on the rail. Both are guaranteed misses, and both raise a hint line the props must
+  // then make room for.
+  { mode: "tray", recipe: "bond:8", box: 0, id: "tray-miss", miss: ".modeReady" },
+  { mode: "rail", recipe: "bond:9", box: 0, id: "rail-count-miss", miss: ".rail__stop--pick" },
   { mode: "plates", recipe: "share:4", box: 0 },
   { mode: "slice", recipe: "fraction:4", box: 0 },
   { mode: "burnt", recipe: "table:6", box: 5 },
@@ -205,6 +210,21 @@ async function main() {
       );
 
       await sleep(1100);
+
+      // Photograph the screen *after* a miss where a case asks for it. A wrong answer adds a hint
+      // line to the body, which takes room away from the props — and the state a child sees after
+      // getting something wrong is the state that matters most, because it is the one they have to
+      // act on. It had never been photographed at all.
+      if (kase.miss) {
+        await evaluate(
+          ws,
+          (sel) => {
+            document.querySelector(sel)?.click();
+          },
+          kase.miss
+        );
+        await sleep(1500);
+      }
 
       const shot = await send(ws, "Page.captureScreenshot", { format: "png" });
       const name = `${size.id}-${kase.id ?? kase.mode}.png`;

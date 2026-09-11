@@ -183,6 +183,17 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
     const staleTag = el("p", { class: "lesson__stale", textContent: "Gone stale — bake it fresh" });
     staleTag.hidden = true;
 
+    /**
+     * A hint, shown *underneath* the question rather than instead of it.
+     *
+     * On the keypad the question lives in the ladder, so overwriting the prompt with a hint costs
+     * nothing. On a hands-on mode the prompt **is** the question — "Crumb is on 5. He hops back
+     * two. Where does he land?" — and replacing it left a five-year-old reading advice about a
+     * question that was no longer on screen. A playtest caught it on the very first miss.
+     */
+    const hintEl = el("p", { class: "lesson__hint" });
+    hintEl.hidden = true;
+
     const skyEl = el("div", { class: "lesson__shelf" });
 
     /** Where a hands-on mode mounts. Empty, and `hidden`, on keypad questions. */
@@ -221,7 +232,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
 
     const inputBar = el("div", { class: "lesson__input" }, stagger(keypad));
 
-    const bodyEl = el("div", { class: "lesson__body" }, ticketHost, promptEl, staleTag, ladder, modeHost);
+    const bodyEl = el("div", { class: "lesson__body" }, ticketHost, promptEl, staleTag, hintEl, ladder, modeHost);
 
     const root = el(
       "div",
@@ -540,6 +551,8 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
       root.dataset.mode = modeId;
       root.dataset.stale = stale ? "1" : "0";
       staleTag.hidden = !stale;
+      hintEl.hidden = true;
+      hintEl.textContent = "";
       inputBar.hidden = !usesKeypad;
       ladder.hidden = !usesKeypad;
       modeHost.hidden = usesKeypad;
@@ -761,6 +774,7 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
         if (misses >= 3) {
           promptEl.textContent = `It was ${asked.expected}. Crumb will show you again soon.`;
           staleTag.hidden = true;
+          hintEl.hidden = true;
           world.crumb.setMood("encouraging");
           audio.select();
           if (mode) mode.reveal?.();
@@ -777,8 +791,16 @@ export function makeLessonScreen(recipe: Recipe): (world: World) => ScreenInstan
         // harsh wrong-answer copy; here a miss buys you a strategy you can act on. A mode's own
         // hint is about the thing in front of the child — "give one to every plate, then go round
         // again" — so it wins over the generic strategy line whenever there is one.
-        promptEl.textContent =
-          misses >= 2 ? secondHint(asked, said) : (mode?.hint ?? askedHint(asked));
+        const help = misses >= 2 ? secondHint(asked, said) : (mode?.hint ?? askedHint(asked));
+        if (mode) {
+          hintEl.textContent = help;
+          hintEl.hidden = false;
+          // A new line in the body means less room for the props, so re-fit rather than let the
+          // tick slide under the fold.
+          requestAnimationFrame(fitMode);
+        } else {
+          promptEl.textContent = help;
+        }
         await wait(world.reducedMotion ? 260 : 620);
         delete slotEl.dataset.status;
         delete modeHost.dataset.status;

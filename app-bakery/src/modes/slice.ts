@@ -106,7 +106,7 @@ export function sliceMode(ctx: ModeContext): ModeInstance {
     element,
     prompt: `Cut every cake into ${name}.`,
     spoken: `There are ${wholes} whole cakes. Cut each one into ${per} ${sliceName(per, per)}, then say how many ${name} there are.`,
-    hint: `Each cake makes ${per}. Count them up: ${Array.from({ length: Math.min(wholes, 6) }, (_, i) => (i + 1) * per).join(", ")}.`,
+    hint: `Each cake makes ${per}. Cut them all, then count the pieces.`,
     anchor: () => centreOf(lastTouched) ?? centreOf(board),
     reveal: () => {
       cut.fill(true);

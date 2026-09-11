@@ -121,8 +121,8 @@ export function trayMode(ctx: ModeContext): ModeInstance {
       ? `There are ${f.a} on the tray. The order is for ${f.answer}. Fill it up, then press the tick.`
       : `There are ${f.a} on the tray. Take ${f.b} off, then press the tick.`,
     hint: adding
-      ? `Start at ${f.a} and count on until the tray holds ${f.answer}.`
-      : `Start at ${f.a} and count back: ${countBack(f.a, f.b)}.`,
+      ? `Start at ${f.a} and count on, one bun at a time, until the tray is full.`
+      : `Lift them off one at a time, counting back as you go.`,
     anchor: () => centreOf(lastTouched) ?? centreOf(board),
     reveal: () => {
       filled = target;
@@ -137,10 +137,4 @@ export function trayMode(ctx: ModeContext): ModeInstance {
       paint();
     },
   };
-}
-
-function countBack(from: number, by: number): string {
-  const seq: number[] = [];
-  for (let i = 1; i <= Math.min(by, 6); i++) seq.push(from - i);
-  return seq.join(", ") + (by > 6 ? ", …" : "");
 }

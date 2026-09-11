@@ -1,6 +1,6 @@
 import { el } from "../core/dom";
 import { audio } from "../core/audio";
-import { factText, opSymbol, sliceName, type Fact } from "../game/curriculum";
+import { opSymbol, sliceName, type Fact } from "../game/curriculum";
 import type { ModeContext, ModeInstance } from "./mode";
 import { centreOf } from "./mode";
 
@@ -86,7 +86,7 @@ export function burntMode(ctx: ModeContext): ModeInstance {
     element,
     prompt: "One of these came out wrong. Which one?",
     spoken: `Three cakes. ${cards.map((c) => written(c.fact, c.shown)).join(". ")}. Tap the one that is wrong.`,
-    hint: `Work each one out yourself. ${factText(target, true)} — check that one.`,
+    hint: `Cover the answers with your hand. Work each sum out yourself, then look.`,
     anchor: () => centreOf(picked) ?? centreOf(tray),
     reveal: () => {
       // Burn the right one in front of them, so the answer is the same event a correct tap would

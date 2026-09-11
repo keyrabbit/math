@@ -334,6 +334,7 @@ const READ = `(() => {
     stale: !!(q('.lesson__stale') && !q('.lesson__stale').hidden),
     ticket: txt('.ticket__body'),
     prompt: txt('.lesson__prompt'),
+    hint: txt('.lesson__hint'),
     recipe: txt('.lesson__recipe'),
     sub: txt('.lesson__sub'),
     headline: txt('.headline'),
@@ -497,6 +498,7 @@ async function playMode(s, { slip }) {
         // a rail that draws the wrong stops is caught rather than silently followed.
         const hop = /on\s+(\d+)\.\s*He hops (back|on)\s+(\w+)/i.exec(s.prompt || "");
         if (!hop) {
+          if (await movedOn()) return null;
           note("issue", "The counting rail's prompt did not say where Crumb starts", { prompt: s.prompt });
           return null;
         }
@@ -579,9 +581,29 @@ async function playMode(s, { slip }) {
         await sleep(rand(110, 300));
       }
       await sleep(rand(300, 800));
-      const after = await read();
+      let after = await read();
+      // An uneven deal is not a wrong answer — the game levels the plates and hands the extras
+      // back, and the child shares again. A driver that treated that as a bug never got to the
+      // question, so it re-deals whatever came back to the pile.
+      for (let round = 0; round < 3; round++) {
+        if (!after.modeState || after.modeState.remaining <= 0) break;
+        note("play", `evened up; ${after.modeState.remaining} back on the pile`);
+        let j = 0;
+        let g = 0;
+        for (;;) {
+          const now = (await read()).modeState;
+          if (!now || now.remaining <= 0 || g++ > 60) break;
+          const lowest = now.counts.indexOf(Math.min(...now.counts));
+          if (!(await tapNth(".plates__plate", lowest < 0 ? j % m.plates : lowest))) break;
+          j++;
+          await sleep(rand(90, 240));
+        }
+        await sleep(rand(300, 700));
+        after = await read();
+      }
       const options = after.chips.map((c) => c.value).filter((v) => Number.isFinite(v));
       if (options.length === 0) {
+        if (await movedOn()) return null;
         note("issue", "Dealing every treat out did not bring up the answer chips", {
           prompt: s.prompt,
           state: after.modeState,
@@ -611,6 +633,7 @@ async function playMode(s, { slip }) {
       const expected = m.wholes * per;
       const options = after.chips.map((c) => c.value).filter((v) => Number.isFinite(v));
       if (options.length === 0) {
+        if (await movedOn()) return null;
         note("issue", "Cutting every cake did not bring up the answer chips", {
           prompt: s.prompt,
           state: after.modeState,
@@ -949,6 +972,19 @@ for (let step = 0; step < 4000; step++) {
               );
               if (!helped) {
                 note("issue", `A wrong ${s.mode} answer produced no hint of any kind`, { prompt: s.prompt });
+              }
+              // Assertion: a hint must not contain the answer.
+              //
+              // Four of the six modes shipped a hint that simply printed it — "count one hop on:
+              // 9", "5, 10, 15, 20", "4 plates, 6 times round". A child who misses once then gets
+              // handed the answer has been taught to miss on purpose. Numbers already visible in
+              // the question do not count, because repeating those is legitimate scaffolding.
+              const hint = after.hint || "";
+              const answer = String(played.expected);
+              const inHint = new RegExp(`(^|\\D)${answer}(\\D|$)`).test(hint);
+              const inPrompt = new RegExp(`(^|\\D)${answer}(\\D|$)`).test(after.prompt || "");
+              if (inHint && !inPrompt) {
+                note("issue", `The ${s.mode} hint gives the answer away`, { hint, answer, prompt: after.prompt });
               }
             }
           }

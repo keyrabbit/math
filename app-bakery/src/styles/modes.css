@@ -954,6 +954,30 @@
   font-weight: 700;
   letter-spacing: 0.02em;
 }
+
+/* The hint line, for hands-on questions.
+   Its own row under the question rather than in place of it, because on a
+   manipulative the prompt carries the whole question and a child who has just
+   got something wrong is precisely the child who still needs to read it. Styled
+   as advice, not as a correction: quieter than the question, never red. */
+.lesson__hint {
+  margin: 0;
+  align-self: center;
+  max-width: 34ch;
+  text-align: center;
+  text-wrap: balance;
+  color: var(--ember-200, var(--text-faint));
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  animation: hintIn var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes hintIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
 /* ---------------------------------------------------- short viewports
 
    A phone held sideways gives the question band about 200px of height, and
@@ -1003,5 +1027,14 @@
 
   .lesson__stale {
     display: none;
+  }
+
+  /* Sideways the hint stays — it is the only help a stuck child gets, and the
+     prop fitter re-measures when it appears, so the props give up the room
+     rather than the advice. Two lines at most. */
+  .lesson__hint {
+    font-size: var(--text-xs);
+    max-width: 52ch;
+    line-height: 1.2;
   }
 }

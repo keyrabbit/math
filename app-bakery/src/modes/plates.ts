@@ -115,15 +115,23 @@ export function platesMode(ctx: ModeContext): ModeInstance {
     paintPlates();
     if (uneven()) {
       // Not a wrong answer — a wrong *arrangement*. Scoring it would punish a child for exploring
-      // exactly the thing the mode was built to surface, so instead the plates get put back and
-      // the rule gets said out loud.
-      question.textContent = "Every plate needs the same. Let's share them again.";
+      // exactly the thing the mode was built to surface, so instead the rule gets said out loud
+      // and the plates are levelled.
+      //
+      // Levelled, not emptied. Wiping all twenty taps because the last one went on the wrong plate
+      // is the kind of punishment that teaches a child to stop touching things; taking back only
+      // the surplus leaves a fair share on every plate and the extras back on the pile, which is
+      // both kinder and a truer picture of what "the same each" means.
+      const fair = Math.min(...counts);
+      question.textContent = "Every plate needs the same. Here are the extra ones back.";
       question.classList.add("is-nudge");
       audio.softMiss();
       window.setTimeout(() => {
         if (phase !== "answering") return;
-        counts.fill(0);
-        remaining = totalTreats;
+        for (let i = 0; i < counts.length; i++) {
+          remaining += counts[i] - fair;
+          counts[i] = fair;
+        }
         phase = "dealing";
         question.textContent = "";
         question.classList.remove("is-nudge");
@@ -164,7 +172,7 @@ export function platesMode(ctx: ModeContext): ModeInstance {
     element,
     prompt: `Share ${totalTreats} onto ${plateCount} plates.`,
     spoken: `Share ${totalTreats} treats fairly onto ${plateCount} plates, then say how many are on each.`,
-    hint: `Give one to every plate, then go round again. ${plateCount} plates, ${perPlate} times round.`,
+    hint: `Give one to every plate, then go round again, until the pile is empty.`,
     anchor: () => centreOf(lastTouched) ?? centreOf(row),
     reveal: () => {
       counts.fill(perPlate);
