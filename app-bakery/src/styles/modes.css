@@ -682,47 +682,117 @@
   max-height: calc(var(--prop) * 1.6);
   padding: var(--sp-3) var(--sp-3);
   border: none;
-  border-radius: var(--r-md);
-  /* A sponge slab with icing on top: two stacked gradients rather than two
-     elements, so the whole card can be tinted in one go when it burns. */
-  background:
-    linear-gradient(180deg, #f7e6c6 0 46%, #e0c093 46% 60%, #c79a67 60% 100%);
-  box-shadow: var(--shadow-md), inset 0 2px 0 rgba(255, 255, 255, 0.5);
+  /* Domed at the top, squared at the base, so it sits on the tray rather than
+     floating like a button. */
+  border-radius: calc(var(--r-md) * 1.6) calc(var(--r-md) * 1.6) var(--r-sm) var(--r-sm);
+  /* The sponge. The icing and the paper case are layered over it below. */
+  background: linear-gradient(180deg, #c89257 0%, #b07f48 58%, #986b3808 100%);
+  box-shadow: var(--shadow-md), inset 0 -3px 0 rgba(0, 0, 0, 0.12);
   color: var(--ink-800);
   font-family: var(--font-display);
   font-weight: 800;
   font-size: clamp(0.9rem, calc(var(--prop) * 0.42), 2.2rem);
   cursor: pointer;
+  overflow: hidden;
   transition:
     transform var(--dur-fast) var(--ease-spring),
     filter var(--dur-base) var(--ease-out),
     opacity var(--dur-base) var(--ease-out);
 }
 
+/* The fluted paper case. Photographed in a real run, the three cakes read as
+   three beige cards — the mode is called "spot the burnt one" and nothing on
+   screen was a cake. A ridged base and a dripping icing layer carry the whole
+   metaphor for about twenty lines of CSS and no new assets. */
+.burnt__cake::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 22%;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.1) 0 3px,
+      rgba(255, 255, 255, 0.09) 3px 7px
+    ),
+    linear-gradient(180deg, #b5834f, #8e6238);
+  border-radius: 0 0 var(--r-sm) var(--r-sm);
+}
+
 .burnt__cake:not(:disabled):active {
   transform: scale(0.95);
 }
 
+/* The icing, dripping over the edge, with sprinkles on it. */
 .burnt__glaze {
   position: absolute;
-  inset: 6px 8px auto;
-  height: 34%;
-  border-radius: var(--r-sm) var(--r-sm) 40% 40%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0));
+  inset: 0 0 auto 0;
+  height: 46%;
   pointer-events: none;
+  background:
+    radial-gradient(circle 2.2px at 18% 34%, #ff9ec4 99%, #0000),
+    radial-gradient(circle 2.2px at 34% 62%, #8fd6c0 99%, #0000),
+    radial-gradient(circle 2.2px at 57% 30%, #ffd166 99%, #0000),
+    radial-gradient(circle 2.2px at 73% 58%, #9ec9ff 99%, #0000),
+    radial-gradient(circle 2.2px at 88% 38%, #ff9ec4 99%, #0000),
+    linear-gradient(180deg, #fffaf0 0%, #fff1d8 70%, #ffe9c4 100%);
+  filter: none;
+}
+
+/* The drip.
+ *
+ * Painted as half-circles of icing colour hanging over the sponge, not cut out
+ * of the icing with a CSS mask. A two-layer `mask` shorthand was the obvious
+ * way to do it and produced, in three photographed attempts, a dead-straight
+ * icing line — so this is the version that can be seen working in the frames
+ * rather than the version that reads better in the stylesheet.               */
+.burnt__glaze::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 13px;
+  background: radial-gradient(circle 13px at 13px 0, #ffe9c4 98%, #0000) 0 0 / 26px 26px repeat-x;
 }
 
 .burnt__sum {
   position: relative;
+  z-index: 1;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  /* The sum is iced across the middle, so it crosses both the icing and the
+     sponge. A soft light halo keeps it readable over the darker half. */
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.5),
+    0 0 12px rgba(255, 247, 232, 0.95),
+    0 0 22px rgba(255, 247, 232, 0.75);
 }
 
 /* Found it. The cake chars, which is both the answer and the joke. */
 .burnt__cake.is-burnt {
-  background: linear-gradient(180deg, #4a3222 0 46%, #34211408 46%, #241309 100%);
+  background: linear-gradient(180deg, #3c2718 0%, #241309 100%);
   color: var(--sugar-300);
   animation: burntPuff 520ms var(--ease-out) both;
+}
+
+.burnt__cake.is-burnt .burnt__glaze {
+  background: linear-gradient(180deg, #5a3a22 0%, #3a2414 100%);
+}
+
+.burnt__cake.is-burnt .burnt__glaze::after {
+  background: radial-gradient(circle 13px at 13px 0, #3a2414 98%, #0000) 0 0 / 26px 26px repeat-x;
+}
+
+.burnt__cake.is-burnt .burnt__sum {
+  text-shadow: none;
+}
+
+.burnt__cake.is-burnt::after {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.3) 0 3px, rgba(255, 255, 255, 0.05) 3px 7px),
+    linear-gradient(180deg, #4a2f1a, #2a190c);
 }
 
 .burnt__cake.is-fine {

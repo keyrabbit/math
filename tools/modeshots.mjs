@@ -60,6 +60,9 @@ const CASES = [
   { mode: "plates", recipe: "share:4", box: 0 },
   { mode: "slice", recipe: "fraction:4", box: 0 },
   { mode: "burnt", recipe: "table:6", box: 5 },
+  // The joke landing: the burnt cake actually charring. Clicking the right one is a *correct*
+  // answer, so this photographs the reward rather than a miss.
+  { mode: "burnt", recipe: "table:6", box: 5, id: "burnt-charred", miss: '.burnt__cake[data-burnt="1"]', settle: 320 },
   { mode: "ticket", recipe: "bond:14", box: 5 },
   { mode: "keypad", recipe: "bond:10", box: 3 },
   // Not a mode: the ending. Photographed three times because it is the only screen in the game
@@ -343,7 +346,7 @@ async function main() {
           },
           kase.miss
         );
-        await sleep(1500);
+        await sleep(kase.settle ?? 1500);
       }
 
       const shot = await send(ws, "Page.captureScreenshot", { format: "png" });
